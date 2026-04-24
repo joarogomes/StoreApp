@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AGUA CRISTALINA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand brand-visual">
+        <img src="assets/logo.png" alt="Logo AGUA CRISTALINA" class="brand-logo">
+        <div class="brand-support">
+          <p class="eyebrow">Gestao inteligente</p>
+          <h1 class="sidebar-title">AGUA CRISTALINA</h1>
+          <p class="brand-tagline">Filtrada e purificada</p>
+        </div>
+      </div>
+
+      <nav class="nav-tabs" id="navTabs">
+        <button class="nav-tab active" data-view="dashboard">Dashboard</button>
+        <button class="nav-tab" data-view="vendas">Vendas</button>
+        <button class="nav-tab" data-view="clientes">Clientes</button>
+        <button class="nav-tab" data-view="estoque">Estoque</button>
+        <button class="nav-tab" data-view="financas">Financas</button>
+        <button class="nav-tab" data-view="agua">Agua</button>
+        <button class="nav-tab" data-view="relatorios">Relatorios</button>
+      </nav>
+
+      <section class="sidebar-card">
+        <p class="card-label">Relatorio diario</p>
+        <h3>WhatsApp</h3>
+        <p>Envio preparado para <strong>+244939667223</strong>.</p>
+        <button class="primary-button" id="sendWhatsappReport">Enviar resumo do dia</button>
+      </section>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Loja de agua filtrada</p>
+          <h2 id="viewTitle">Dashboard operacional</h2>
+        </div>
+        <div class="topbar-actions">
+          <div class="status-pill" id="syncStatus">Modo local</div>
+          <button class="primary-button" id="monthlyReportButton">Resumo mensal</button>
+        </div>
+      </header>
+
+      <section class="view active" id="dashboard">
+        <div class="hero-panel">
+          <div>
+            <p class="eyebrow">Resumo em tempo real</p>
+            <h3>Uma leitura clara das vendas, finanças, estoque e qualidade da água</h3>
+            <p class="hero-copy">Os gráficos usam cores por desempenho: abaixo de 17.000 Kz em vermelho, entre 17.000 e 25.000 Kz em amarelo e acima de 25.000 Kz em verde.</p>
+          </div>
+          <div class="period-switch" id="periodSwitch">
+            <button class="period-button active" data-period="daily">Diario</button>
+            <button class="period-button" data-period="weekly">Semanal</button>
+            <button class="period-button" data-period="monthly">Mensal</button>
+          </div>
+        </div>
+
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <div class="dashboard-grid dashboard-grid-rich">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Vendas por periodo</p>
+                <h3>Performance comercial</h3>
+              </div>
+            </div>
+            <div class="chart chart-bars" id="salesChart"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">KPI por produto</p>
+                <h3>Pizza de vendas</h3>
+              </div>
+            </div>
+            <div class="pie-layout">
+              <div id="productPieChart" class="pie-chart-shell"></div>
+              <div id="productPieLegend" class="list-stack"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Distribuicao</p>
+                <h3>Pagamentos do periodo</h3>
+              </div>
+            </div>
+            <div class="payment-breakdown" id="paymentBreakdown"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Clientes</p>
+                <h3>Saldo acumulado</h3>
+              </div>
+            </div>
+            <div id="clientBalances" class="list-stack"></div>
+          </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Qualidade da agua</p>
+                <h3>Ultimas medicoes</h3>
+              </div>
+            </div>
+            <div id="waterSummary" class="summary-strip"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="vendas">
+        <div class="two-column">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Nova venda</p>
+                <h3>Registrar venda ou movimento do cliente</h3>
+              </div>
+            </div>
+            <form id="saleForm" class="form-grid">
+              <label>
+                Cliente
+                <select name="clientId" id="saleClient"></select>
+              </label>
+              <label>
+                Produto
+                <select name="productId" id="saleProduct"></select>
+              </label>
+              <label>
+                Quantidade
+                <input type="number" name="quantity" id="saleQuantity" min="1" value="1" required>
+              </label>
+              <label>
+                Metodo de pagamento
+                <select name="paymentMethod" id="salePaymentMethod">
+                  <option>Consolidada</option>
+                  <option>TPA</option>
+                  <option>Express</option>
+                  <option>Saldo do cliente</option>
+                </select>
+              </label>
+              <label>
+                Tipo de operacao
+                <select name="entryType" id="saleEntryType">
+                  <option value="sale">Venda</option>
+                  <option value="deposit">Deposito do cliente</option>
+                  <option value="withdrawal">Levantamento do saldo</option>
+                </select>
+              </label>
+              <label>
+                Data
+                <input type="date" name="date" id="saleDate" required>
+              </label>
+
+              <div class="price-preview full-width">
+                <article class="mini-card price-card">
+                  <span class="card-label">Preco do produto</span>
+                  <strong id="saleUnitPrice">0 Kz</strong>
+                </article>
+                <article class="mini-card price-card">
+                  <span class="card-label">Preco total</span>
+                  <strong id="saleTotalPreview">0 Kz</strong>
+                </article>
+              </div>
+
+              <p class="helper-note full-width">Cliente opcional para venda normal. Para deposito, levantamento ou pagamento por saldo do cliente, selecione um cliente.</p>
+              <button class="primary-button" type="submit">Guardar movimento</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Filtros</p>
+                <h3>Historico de vendas</h3>
+              </div>
+            </div>
+            <div class="filter-grid">
+              <label>
+                Cliente
+                <select id="filterClient"></select>
+              </label>
+              <label>
+                Produto
+                <select id="filterProduct"></select>
+              </label>
+              <label>
+                Pagamento
+                <select id="filterPayment">
+                  <option value="">Todos</option>
+                  <option>Consolidada</option>
+                  <option>TPA</option>
+                  <option>Express</option>
+                  <option>Saldo do cliente</option>
+                </select>
+              </label>
+              <label>
+                Data
+                <input type="date" id="filterDate">
+              </label>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Cliente</th>
+                    <th>Produto</th>
+                    <th>Tipo</th>
+                    <th>Pagamento</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="salesTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="clientes">
+        <div class="two-column">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Cadastro</p>
+                <h3>Novo cliente</h3>
+              </div>
+            </div>
+            <form id="clientForm" class="form-grid">
+              <label>
+                Nome
+                <input type="text" name="name" placeholder="Nome do cliente" required>
+              </label>
+              <label>
+                Telefone
+                <input type="text" name="phone" placeholder="+244..." required>
+              </label>
+              <label>
+                Endereco
+                <input type="text" name="address" placeholder="Bairro, rua ou referencia" required>
+              </label>
+              <button class="primary-button" type="submit">Adicionar cliente</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Carteira</p>
+                <h3>Saldos dos clientes</h3>
+              </div>
+            </div>
+            <div id="clientsList" class="list-stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="estoque">
+        <div class="two-column inventory-layout">
+          <div class="stack-column">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="card-label">Novo produto</p>
+                  <h3>Adicionar produto ao estoque</h3>
+                </div>
+              </div>
+              <form id="productForm" class="form-grid">
+                <label>
+                  Nome do produto
+                  <input type="text" name="name" placeholder="Ex: Bomba de agua" required>
+                </label>
+                <label>
+                  Categoria
+                  <select name="category">
+                    <option value="Agua">Agua</option>
+                    <option value="Acessorio">Acessorio</option>
+                  </select>
+                </label>
+                <label>
+                  Preco de venda
+                  <input type="number" name="price" min="0" step="0.01" required>
+                </label>
+                <label>
+                  Unidade
+                  <input type="text" name="unit" value="un" required>
+                </label>
+                <label>
+                  Controla estoque?
+                  <select name="stockControlled">
+                    <option value="true">Sim</option>
+                    <option value="false">Nao</option>
+                  </select>
+                </label>
+                <label>
+                  Estoque inicial
+                  <input type="number" name="initialStock" min="0" value="0">
+                </label>
+                <label>
+                  Custo unitario
+                  <input type="number" name="unitCost" min="0" step="0.01" value="0">
+                </label>
+                <button class="primary-button" type="submit">Criar produto</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="card-label">Reposicao</p>
+                  <h3>Entrada de estoque</h3>
+                </div>
+              </div>
+              <form id="stockForm" class="form-grid">
+                <label>
+                  Produto
+                  <select name="productId" id="stockProduct"></select>
+                </label>
+                <label>
+                  Quantidade
+                  <input type="number" name="quantity" min="1" value="1" required>
+                </label>
+                <label>
+                  Custo unitario
+                  <input type="number" name="unitCost" min="0" step="0.01" value="0" required>
+                </label>
+                <button class="primary-button" type="submit">Atualizar estoque</button>
+              </form>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Itens controlados</p>
+                <h3>Estoque atual</h3>
+              </div>
+            </div>
+            <div id="stockList" class="list-stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="financas">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="card-label">Analise financeira</p>
+              <h3>Despesas e investimentos por periodo</h3>
+            </div>
+            <div class="period-switch" id="financePeriodSwitch">
+              <button class="period-button active" data-finance-period="daily">Dia</button>
+              <button class="period-button" data-finance-period="weekly">Semana</button>
+              <button class="period-button" data-finance-period="monthly">Mes</button>
+            </div>
+          </div>
+          <div class="finance-summary-grid" id="financeSummaryCards"></div>
+          <div class="finance-chart" id="financeChart"></div>
+        </section>
+
+        <div class="two-column">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Lancamentos</p>
+                <h3>Despesas e investimentos</h3>
+              </div>
+            </div>
+            <form id="financeForm" class="form-grid">
+              <label>
+                Tipo
+                <select name="type">
+                  <option value="expense">Despesa</option>
+                  <option value="investment">Investimento</option>
+                </select>
+              </label>
+              <label>
+                Categoria
+                <input type="text" name="category" placeholder="Energia, transporte, manutencao..." required>
+              </label>
+              <label>
+                Valor
+                <input type="number" name="amount" min="0" step="0.01" required>
+              </label>
+              <label>
+                Data
+                <input type="date" name="date" id="financeDate" required>
+              </label>
+              <button class="primary-button" type="submit">Registrar movimento</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Historico</p>
+                <h3>Movimentos financeiros</h3>
+              </div>
+            </div>
+            <div id="financeList" class="list-stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="agua">
+        <section class="panel water-trend-panel">
+          <div class="panel-header">
+            <div>
+              <p class="card-label">Qualidade da agua</p>
+              <h3>Tendencia tecnica</h3>
+            </div>
+            <div class="period-switch" id="waterMetricSwitch">
+              <button class="period-button active" data-water-metric="ph">pH</button>
+              <button class="period-button" data-water-metric="tds">TDS</button>
+              <button class="period-button" data-water-metric="temperature">Temperatura</button>
+            </div>
+          </div>
+          <div class="water-kpis" id="waterKpis"></div>
+          <div class="line-chart-shell">
+            <svg id="waterLineChart" viewBox="0 0 640 280" preserveAspectRatio="none"></svg>
+          </div>
+        </section>
+
+        <div class="two-column">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Medicao</p>
+                <h3>Parametros da agua</h3>
+              </div>
+            </div>
+            <form id="waterForm" class="form-grid">
+              <label>
+                pH
+                <input type="number" name="ph" min="0" max="14" step="0.1" required>
+              </label>
+              <label>
+                TDS
+                <input type="number" name="tds" min="0" step="1" required>
+              </label>
+              <label>
+                Temperatura
+                <input type="number" name="temperature" step="0.1" required>
+              </label>
+              <label>
+                Data
+                <input type="date" name="date" id="waterDate" required>
+              </label>
+              <button class="primary-button" type="submit">Guardar medicao</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Manutencao</p>
+                <h3>Registo e historico</h3>
+              </div>
+            </div>
+            <form id="maintenanceForm" class="form-grid compact-form">
+              <label>
+                Tipo
+                <input type="text" name="title" placeholder="Troca de filtro, limpeza..." required>
+              </label>
+              <label>
+                Custo
+                <input type="number" name="cost" min="0" step="0.01" required>
+              </label>
+              <label class="full-width">
+                Observacao
+                <input type="text" name="notes" placeholder="Detalhes da manutencao" required>
+              </label>
+              <label>
+                Data
+                <input type="date" name="date" id="maintenanceDate" required>
+              </label>
+              <button class="primary-button" type="submit">Guardar manutencao</button>
+            </form>
+            <div id="maintenanceList" class="list-stack"></div>
+          </section>
+        </div>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="card-label">Historico tecnico</p>
+              <h3>Ultimos parametros registados</h3>
+            </div>
+          </div>
+          <div id="waterHistory" class="list-stack"></div>
+        </section>
+      </section>
+
+      <section class="view" id="relatorios">
+        <div class="two-column">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Diario</p>
+                <h3>Resumo operacional</h3>
+              </div>
+            </div>
+            <div id="dailyReport" class="report-card"></div>
+            <button class="primary-button" id="copyDailyReport">Copiar relatorio diario</button>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Mensal</p>
+                <h3>Resumo completo do mes</h3>
+              </div>
+            </div>
+            <div id="monthlyReport" class="report-card"></div>
+            <button class="ghost-button" id="refreshReports">Atualizar relatorios</button>
+          </section>
+        </div>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="card-label">Supabase</p>
+              <h3>Conexao e sincronizacao</h3>
+            </div>
+          </div>
+          <div class="integration-grid integration-grid-compact">
+            <form id="supabaseForm" class="form-grid compact-integration-form">
+              <label class="full-width">
+                Project URL
+                <input type="url" name="url" id="supabaseUrl" placeholder="https://xxxx.supabase.co">
+              </label>
+              <label class="full-width">
+                Anon key
+                <input type="password" name="anonKey" id="supabaseAnonKey" placeholder="Cole aqui a anon public key">
+              </label>
+              <div class="actions-row full-width">
+                <button class="primary-button" type="submit">Guardar e conectar</button>
+                <button class="ghost-button" type="button" id="pullSupabaseData">Puxar dados do Supabase</button>
+                <button class="ghost-button" type="button" id="pushSupabaseData">Enviar dados locais</button>
+              </div>
+
+              <details class="integration-details full-width">
+                <summary>Mapeamento avancado das tabelas</summary>
+                <div class="integration-mapping-grid">
+                  <label>
+                    Lojas
+                    <input type="text" name="stores" id="tableStores" value="stores">
+                  </label>
+                  <label>
+                    Clientes
+                    <input type="text" name="clients" id="tableClients" value="customers">
+                  </label>
+                  <label>
+                    Produtos
+                    <input type="text" name="products" id="tableProducts" value="products">
+                  </label>
+                  <label>
+                    Vendas
+                    <input type="text" name="sales" id="tableSales" value="sales">
+                  </label>
+                  <label>
+                    Despesas
+                    <input type="text" name="expenses" id="tableExpenses" value="expenses">
+                  </label>
+                  <label>
+                    Investimentos
+                    <input type="text" name="investments" id="tableInvestments" value="investments">
+                  </label>
+                  <label>
+                    Estoque
+                    <input type="text" name="stock" id="tableStock" value="inventory_items">
+                  </label>
+                  <label>
+                    Movimentos
+                    <input type="text" name="movements" id="tableMovements" value="inventory_movements">
+                  </label>
+                  <label>
+                    Qualidade da agua
+                    <input type="text" name="water" id="tableWater" value="water_quality_records">
+                  </label>
+                  <label>
+                    Manutencao
+                    <input type="text" name="maintenance" id="tableMaintenance" value="maintenance_records">
+                  </label>
+                </div>
+              </details>
+            </form>
+
+            <div class="integration-notes">
+              <div class="mini-card">
+                <strong>Status da integracao</strong>
+                <small id="supabaseStatusText">Sem configuracao. O app continua funcional com dados locais.</small>
+              </div>
+              <div class="mini-card compact-note">
+                <strong>Fluxo</strong>
+                <small>Conectar, puxar dados e depois trabalhar normalmente.</small>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <template id="metricTemplate">
+    <article class="metric-card">
+      <p class="card-label"></p>
+      <h3></h3>
+      <span></span>
+    </article>
+  </template>
+</body>
+</html>
