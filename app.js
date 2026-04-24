@@ -65,6 +65,8 @@ let currentPeriod = "daily";
 let periodAnchor = today;
 let activeSeries = { sales: true, expenses: true, profit: true };
 let financePeriod = "daily";
+let financeAnchor = today;
+let activeFinanceSeries = { expenses: true, investments: true, impact: true };
 let waterMetric = "ph";
 let supabaseConfig = loadSupabaseConfig();
 let supabaseClient = null;
@@ -130,14 +132,29 @@ function hydrateDates() {
   });
 }
 
+function closeMobileMenu() {
+  document.body.classList.remove("menu-open");
+  document.getElementById("mobileMenuToggle")?.setAttribute("aria-expanded", "false");
+}
+
 function bindNavigation() {
   navTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       navTabs.forEach((item) => item.classList.toggle("active", item === tab));
       views.forEach((view) => view.classList.toggle("active", view.id === tab.dataset.view));
       document.getElementById("viewTitle").textContent = tab.textContent;
+      closeMobileMenu();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
   });
+
+  const menuToggle = document.getElementById("mobileMenuToggle");
+  const overlay = document.getElementById("mobileOverlay");
+  menuToggle?.addEventListener("click", () => {
+    const open = document.body.classList.toggle("menu-open");
+    menuToggle.setAttribute("aria-expanded", String(open));
+  });
+  overlay?.addEventListener("click", closeMobileMenu);
 
   dashboardPeriodButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -210,6 +227,27 @@ function bindInteractiveControls() {
     button.addEventListener("click", () => {
       financePeriod = button.dataset.financePeriod;
       financePeriodButtons.forEach((item) => item.classList.toggle("active", item === button));
+      renderFinance();
+    });
+  });
+
+  document.getElementById("financePeriodPrev")?.addEventListener("click", () => shiftFinanceAnchor(-1));
+  document.getElementById("financePeriodNext")?.addEventListener("click", () => shiftFinanceAnchor(1));
+  document.getElementById("financePeriodToday")?.addEventListener("click", () => {
+    financeAnchor = today;
+    syncFinanceAnchorInput();
+    renderFinance();
+  });
+  document.getElementById("financeAnchor")?.addEventListener("change", (event) => {
+    const value = event.target.value;
+    if (value) {
+      financeAnchor = value;
+      renderFinance();
+    }
+  });
+  document.querySelectorAll("#financeSeriesToggles input[type=checkbox]").forEach((input) => {
+    input.addEventListener("change", () => {
+      activeFinanceSeries[input.dataset.financeSeries] = input.checked;
       renderFinance();
     });
   });
@@ -390,13 +428,35 @@ function renderMetricCards(stats) {
 }
 
 function renderInteractiveSalesChart(timeline) {
-  const svg = document.getElementById("salesChartSvg");
-  const tooltip = document.getElementById("salesChartTooltip");
+  renderInteractiveChart({
+    svgId: "salesChartSvg",
+    tooltipId: "salesChartTooltip",
+    timeline,
+    series: [
+      { key: "sales", label: "Vendas", type: "bar", visible: activeSeries.sales, dotClass: "sales", dynamicFill: salesBarFill },
+      { key: "expenses", label: "Despesas", type: "bar", visible: activeSeries.expenses, dotClass: "expenses", color: "#dc5b48", gradientId: "expensesBarGradient", gradientStops: [["0%", "#f5a293"], ["100%", "#dc5b48"]] },
+      { key: "profit", label: "Lucro", type: "line", visible: activeSeries.profit, dotClass: "profit", color: "#7e6dff" }
+    ],
+    extraTooltipRows: (point) => [
+      { label: "Investimentos", value: point.investments, dotClass: "investment" }
+    ],
+    formatValue: currency,
+    minY: 0
+  });
+}
+
+function renderInteractiveChart({ svgId, tooltipId, timeline, series, formatValue, extraTooltipRows, minY }) {
+  const svg = document.getElementById(svgId);
+  const tooltip = tooltipId ? document.getElementById(tooltipId) : null;
   if (!svg) return;
   svg.innerHTML = "";
   if (tooltip) tooltip.style.opacity = "0";
-
   if (!timeline.length) return;
+
+  const visibleSeries = series.filter((s) => s.visible !== false);
+  if (!visibleSeries.length) return;
+
+  const fmt = formatValue || ((v) => formatShortNumber(v));
 
   const width = 880;
   const height = 320;
@@ -407,30 +467,23 @@ function renderInteractiveSalesChart(timeline) {
   const innerWidth = width - paddingLeft - paddingRight;
   const innerHeight = height - paddingTop - paddingBottom;
 
-  const showSales = activeSeries.sales;
-  const showExpenses = activeSeries.expenses;
-  const showProfit = activeSeries.profit;
-
-  const numbers = timeline.flatMap((point) => {
-    const arr = [];
-    if (showSales) arr.push(point.sales);
-    if (showExpenses) arr.push(point.expenses);
-    if (showProfit) arr.push(point.profit);
-    return arr;
-  });
-
-  const dataMax = numbers.length ? Math.max(...numbers, 1000) : 1000;
+  const numbers = timeline.flatMap((point) => visibleSeries.map((s) => Number(point[s.key]) || 0));
+  const dataMax = numbers.length ? Math.max(...numbers, 0) : 0;
   const dataMin = numbers.length ? Math.min(...numbers, 0) : 0;
-  const yMax = niceCeil(Math.max(dataMax, 1000));
-  const yMin = dataMin < 0 ? niceFloor(dataMin) : 0;
+
+  const yMax = niceCeil(Math.max(dataMax, minY === 0 ? 1000 : Math.abs(dataMax) || 1));
+  const baseMinY = minY !== undefined ? minY : (dataMin < 0 ? niceFloor(dataMin) : 0);
+  const yMin = baseMinY > dataMin ? niceFloor(dataMin) : baseMinY;
   const range = Math.max(yMax - yMin, 1);
-
-  const slotWidth = innerWidth / timeline.length;
-  const showBoth = showSales && showExpenses;
-  const barGroupW = slotWidth * 0.6;
-  const barW = showBoth ? barGroupW / 2 - 2 : barGroupW;
-
   const yFor = (value) => paddingTop + innerHeight - ((value - yMin) / range) * innerHeight;
+
+  const barSeries = visibleSeries.filter((s) => s.type === "bar");
+  const lineSeries = visibleSeries.filter((s) => s.type === "line");
+  const slotWidth = innerWidth / timeline.length;
+  const barGroupW = slotWidth * 0.62;
+  const barW = barSeries.length ? Math.max(barGroupW / barSeries.length - 2, 6) : 0;
+
+  const labelStep = Math.max(1, Math.ceil(timeline.length / 14));
 
   const gridLines = [];
   const ticks = 4;
@@ -441,61 +494,75 @@ function renderInteractiveSalesChart(timeline) {
     gridLines.push(`<text x="${paddingLeft - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#647788">${formatShortNumber(value)}</text>`);
   }
 
+  const defs = [];
+  const seenGradients = new Set();
+  visibleSeries.forEach((s) => {
+    if (s.gradientId && !seenGradients.has(s.gradientId)) {
+      seenGradients.add(s.gradientId);
+      const stops = (s.gradientStops || [["0%", s.color || "#1aa8d8"], ["100%", s.color || "#1aa8d8"]])
+        .map(([offset, color]) => `<stop offset="${offset}" stop-color="${color}"/>`)
+        .join("");
+      defs.push(`<linearGradient id="${s.gradientId}" x1="0" x2="0" y1="0" y2="1">${stops}</linearGradient>`);
+    }
+    if (s.type === "line" && s.areaGradientId && !seenGradients.has(s.areaGradientId)) {
+      seenGradients.add(s.areaGradientId);
+      defs.push(`<linearGradient id="${s.areaGradientId}" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="${s.color}" stop-opacity="0.32"/><stop offset="100%" stop-color="${s.color}" stop-opacity="0.02"/></linearGradient>`);
+    }
+  });
+
   const xLabels = [];
-  const bars = [];
-  const profitPoints = [];
+  const barNodes = [];
+  const hoverZones = [];
+  const linePoints = lineSeries.map((s) => ({ series: s, points: [] }));
 
   timeline.forEach((point, index) => {
     const slotX = paddingLeft + slotWidth * index + slotWidth / 2;
-    xLabels.push(`<text x="${slotX}" y="${height - paddingBottom + 18}" text-anchor="middle" font-size="11" fill="#647788">${point.label}</text>`);
+    if (index % labelStep === 0 || index === timeline.length - 1) {
+      xLabels.push(`<text x="${slotX}" y="${height - paddingBottom + 18}" text-anchor="middle" font-size="11" fill="#647788">${point.label}</text>`);
+    }
 
     const baseY = yFor(0);
 
-    if (showSales) {
-      const x = showBoth ? slotX - barW - 1 : slotX - barW / 2;
-      const yTop = yFor(point.sales);
-      const h = Math.max(baseY - yTop, 0);
-      bars.push(`<rect class="chart-bar bar-sales" data-index="${index}" x="${x}" y="${yTop}" width="${barW}" height="${h}" rx="6" fill="${salesBarFill(point.sales)}"/>`);
-    }
+    barSeries.forEach((s, bi) => {
+      const groupStart = slotX - barGroupW / 2;
+      const x = groupStart + bi * (barW + 2);
+      const value = Number(point[s.key]) || 0;
+      const yTop = yFor(value);
+      const h = Math.max(Math.abs(baseY - yTop), 0);
+      const top = Math.min(baseY, yTop);
+      const fill = s.dynamicFill ? s.dynamicFill(value) : (s.gradientId ? `url(#${s.gradientId})` : (s.color || "#1aa8d8"));
+      barNodes.push(`<rect class="chart-bar bar-${s.key}" data-index="${index}" x="${x}" y="${top}" width="${barW}" height="${h}" rx="5" fill="${fill}"/>`);
+    });
 
-    if (showExpenses) {
-      const x = showBoth ? slotX + 1 : slotX - barW / 2;
-      const yTop = yFor(point.expenses);
-      const h = Math.max(baseY - yTop, 0);
-      bars.push(`<rect class="chart-bar bar-expenses" data-index="${index}" x="${x}" y="${yTop}" width="${barW}" height="${h}" rx="6" fill="url(#expensesBarGradient)"/>`);
-    }
+    lineSeries.forEach((s, si) => {
+      linePoints[si].points.push({ x: slotX, y: yFor(Number(point[s.key]) || 0), value: Number(point[s.key]) || 0, index });
+    });
 
-    if (showProfit) {
-      profitPoints.push({ x: slotX, y: yFor(point.profit), value: point.profit, index });
-    }
-
-    bars.push(`<rect class="chart-hover-zone" data-index="${index}" x="${paddingLeft + slotWidth * index}" y="${paddingTop}" width="${slotWidth}" height="${innerHeight}" fill="transparent"/>`);
+    hoverZones.push(`<rect class="chart-hover-zone" data-index="${index}" x="${paddingLeft + slotWidth * index}" y="${paddingTop}" width="${slotWidth}" height="${innerHeight}" fill="transparent"/>`);
   });
 
-  let profitSvg = "";
-  if (showProfit && profitPoints.length) {
-    const path = profitPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-    const dots = profitPoints.map((p) => `<circle class="chart-profit-dot" data-index="${p.index}" cx="${p.x}" cy="${p.y}" r="5" fill="#7e6dff" stroke="white" stroke-width="2"/>`).join("");
-    profitSvg = `
-      <path d="${path}" fill="none" stroke="#7e6dff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      ${dots}
-    `;
-  }
+  const linesSvg = linePoints.map(({ series: s, points }) => {
+    if (!points.length) return "";
+    const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+    let area = "";
+    if (s.areaGradientId) {
+      const baseY = yFor(yMin);
+      area = `<path d="${path} L ${points[points.length - 1].x} ${baseY} L ${points[0].x} ${baseY} Z" fill="url(#${s.areaGradientId})"/>`;
+    }
+    const dots = points.map((p) => `<circle class="chart-profit-dot" data-series="${s.key}" data-index="${p.index}" cx="${p.x}" cy="${p.y}" r="5" fill="${s.color}" stroke="white" stroke-width="2"/>`).join("");
+    return `${area}<path d="${path}" fill="none" stroke="${s.color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+  }).join("");
 
   const baselineY = yFor(0);
   const baseline = yMin < 0 ? `<line x1="${paddingLeft}" y1="${baselineY}" x2="${width - paddingRight}" y2="${baselineY}" stroke="rgba(16,49,77,0.30)" stroke-width="1.2"/>` : "";
 
   svg.innerHTML = `
-    <defs>
-      <linearGradient id="expensesBarGradient" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0%" stop-color="#f5a293"/>
-        <stop offset="100%" stop-color="#dc5b48"/>
-      </linearGradient>
-    </defs>
+    <defs>${defs.join("")}</defs>
     ${gridLines.join("")}
     ${baseline}
-    ${bars.join("")}
-    ${profitSvg}
+    ${barNodes.join("")}
+    ${linesSvg}
+    ${hoverZones.join("")}
     ${xLabels.join("")}
   `;
 
@@ -504,26 +571,25 @@ function renderInteractiveSalesChart(timeline) {
   const showTooltip = (event, index) => {
     const point = timeline[index];
     if (!point) return;
-    tooltip.innerHTML = `
-      <strong>${point.fullLabel || point.label}</strong>
-      <div class="tip-row"><span><span class="series-dot sales"></span>Vendas</span><b>${currency(point.sales)}</b></div>
-      <div class="tip-row"><span><span class="series-dot expenses"></span>Despesas</span><b>${currency(point.expenses)}</b></div>
-      <div class="tip-row"><span><span class="series-dot investment"></span>Investimentos</span><b>${currency(point.investments)}</b></div>
-      <div class="tip-row tip-row-total"><span><span class="series-dot profit"></span>Lucro</span><b>${currency(point.profit)}</b></div>
-    `;
+    const rows = visibleSeries.map((s) => `<div class="tip-row"><span><span class="series-dot ${s.dotClass || s.key}"></span>${s.label}</span><b>${fmt(Number(point[s.key]) || 0, s)}</b></div>`).join("");
+    const extras = (extraTooltipRows ? extraTooltipRows(point) : []).map((r) => `<div class="tip-row"><span><span class="series-dot ${r.dotClass || ""}"></span>${r.label}</span><b>${fmt(r.value)}</b></div>`).join("");
+    tooltip.innerHTML = `<strong>${point.fullLabel || point.label}</strong>${rows}${extras}`;
     const shell = svg.parentElement.getBoundingClientRect();
     const x = event.clientX - shell.left;
     const y = event.clientY - shell.top;
     tooltip.style.left = `${Math.min(Math.max(x + 12, 12), shell.width - 220)}px`;
-    tooltip.style.top = `${Math.max(y - 90, 12)}px`;
+    tooltip.style.top = `${Math.max(y - 110, 12)}px`;
     tooltip.style.opacity = "1";
   };
-
   const hideTooltip = () => { tooltip.style.opacity = "0"; };
 
   svg.querySelectorAll(".chart-hover-zone, .chart-bar, .chart-profit-dot").forEach((el) => {
     el.addEventListener("mousemove", (event) => showTooltip(event, Number(el.dataset.index)));
     el.addEventListener("mouseleave", hideTooltip);
+    el.addEventListener("touchstart", (event) => {
+      const touch = event.touches[0];
+      if (touch) showTooltip({ clientX: touch.clientX, clientY: touch.clientY }, Number(el.dataset.index));
+    }, { passive: true });
   });
 }
 
@@ -747,10 +813,11 @@ function renderFinance() {
 
 function renderFinanceAnalytics() {
   const summary = document.getElementById("financeSummaryCards");
-  const chart = document.getElementById("financeChart");
-  if (!summary || !chart) return;
+  const svg = document.getElementById("financeChartSvg");
+  if (!summary || !svg) return;
 
-  const data = buildFinanceAnalytics(financePeriod);
+  syncFinanceAnchorInput();
+  const data = buildFinanceAnalytics(financePeriod, financeAnchor);
   summary.innerHTML = "";
 
   [
@@ -764,26 +831,44 @@ function renderFinanceAnalytics() {
     summary.appendChild(card);
   });
 
-  chart.innerHTML = "";
-  const max = Math.max(1, ...data.timeline.map((item) => Math.max(item.expense, item.investment)));
-  data.timeline.forEach((point) => {
-    const column = document.createElement("div");
-    column.className = "finance-column";
-    column.innerHTML = `
-      <div class="finance-value-stack">
-        <span class="finance-value-chip expense">${currency(point.expense)}</span>
-        <span class="finance-value-chip investment">${currency(point.investment)}</span>
-      </div>
-      <div class="finance-bars-shell">
-        <div class="finance-bars">
-          <div class="finance-bar expense" style="height:${Math.max((point.expense / max) * 100, 6)}%"></div>
-          <div class="finance-bar investment" style="height:${Math.max((point.investment / max) * 100, 6)}%"></div>
-        </div>
-      </div>
-      <strong>${point.label}</strong>
-    `;
-    chart.appendChild(column);
+  renderFinanceRangeLabel(data.timeline);
+
+  renderInteractiveChart({
+    svgId: "financeChartSvg",
+    tooltipId: "financeChartTooltip",
+    timeline: data.timeline,
+    series: [
+      { key: "expenses", label: "Despesas", type: "bar", visible: activeFinanceSeries.expenses, dotClass: "expenses", color: "#dc5b48", gradientId: "financeExpensesGradient", gradientStops: [["0%", "#f5a293"], ["100%", "#dc5b48"]] },
+      { key: "investments", label: "Investimentos", type: "bar", visible: activeFinanceSeries.investments, dotClass: "investment", color: "#d4a425", gradientId: "financeInvestGradient", gradientStops: [["0%", "#f0d97d"], ["100%", "#d4a425"]] },
+      { key: "impact", label: "Impacto", type: "line", visible: activeFinanceSeries.impact, dotClass: "profit", color: "#7e6dff", areaGradientId: "financeImpactArea" }
+    ],
+    formatValue: currency,
+    minY: 0
   });
+}
+
+function renderFinanceRangeLabel(timeline) {
+  const target = document.getElementById("financeRangeLabel");
+  if (!target || !timeline.length) return;
+  const first = timeline[0].fullLabel || timeline[0].label;
+  const last = timeline[timeline.length - 1].fullLabel || timeline[timeline.length - 1].label;
+  const periodName = financePeriod === "daily" ? "7 dias" : financePeriod === "weekly" ? "8 semanas" : financePeriod === "monthly" ? "12 meses" : "5 anos";
+  target.textContent = `Visualizando ${periodName} - ${first} a ${last}`;
+}
+
+function syncFinanceAnchorInput() {
+  const input = document.getElementById("financeAnchor");
+  if (input && input.value !== financeAnchor) input.value = financeAnchor;
+}
+
+function shiftFinanceAnchor(direction) {
+  const date = new Date(financeAnchor);
+  if (financePeriod === "daily") date.setDate(date.getDate() + direction);
+  else if (financePeriod === "weekly") date.setDate(date.getDate() + direction * 7);
+  else if (financePeriod === "monthly") addMonthsSafely(date, direction);
+  else addMonthsSafely(date, direction * 12);
+  financeAnchor = date.toISOString().slice(0, 10);
+  renderFinance();
 }
 
 function renderWater() {
@@ -828,26 +913,25 @@ function renderWater() {
 }
 
 function renderWaterTrend() {
-  const svg = document.getElementById("waterLineChart");
+  const svg = document.getElementById("waterChartSvg");
   const kpis = document.getElementById("waterKpis");
+  const rangeLabel = document.getElementById("waterRangeLabel");
   if (!svg || !kpis) return;
 
   const readings = state.waterReadings
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-8);
+    .slice(-12);
 
   if (!readings.length) {
     svg.innerHTML = "";
     kpis.innerHTML = "";
+    if (rangeLabel) rangeLabel.textContent = "";
     return;
   }
 
-  const metricLabel = {
-    ph: "pH",
-    tds: "TDS",
-    temperature: "Temperatura"
-  }[waterMetric];
+  const metricLabel = { ph: "pH", tds: "TDS", temperature: "Temperatura" }[waterMetric];
+  const metricColor = { ph: "#1aa8d8", tds: "#126f95", temperature: "#289b65" }[waterMetric];
 
   const values = readings.map((entry) => toNumber(entry[waterMetric]));
   const min = Math.min(...values);
@@ -862,7 +946,27 @@ function renderWaterTrend() {
     <div class="water-kpi"><small>Media</small><strong>${formatMetricValue(waterMetric, avg)}</strong></div>
   `;
 
-  svg.innerHTML = buildLineChartSvg(readings, values, waterMetric, min, max);
+  if (rangeLabel) {
+    rangeLabel.textContent = `${readings.length} medicoes - ${readings[0].date} a ${readings[readings.length - 1].date}`;
+  }
+
+  const timeline = readings.map((entry) => ({
+    label: entry.date.slice(5),
+    fullLabel: entry.date,
+    value: toNumber(entry[waterMetric])
+  }));
+
+  const padding = (max - min) * 0.18 || (max * 0.1) || 1;
+  renderInteractiveChart({
+    svgId: "waterChartSvg",
+    tooltipId: "waterChartTooltip",
+    timeline,
+    series: [
+      { key: "value", label: metricLabel, type: "line", visible: true, dotClass: "profit", color: metricColor, areaGradientId: "waterAreaGradient" }
+    ],
+    formatValue: (v) => formatMetricValue(waterMetric, v),
+    minY: Math.max(0, min - padding)
+  });
 }
 
 function renderReports() {
@@ -1605,14 +1709,16 @@ function buildBuckets(period, anchor) {
     return Array.from({ length: 8 }, (_, idx) => {
       const d = new Date(anchorDate);
       d.setDate(d.getDate() - (7 - idx) * 7);
-      const monday = startOfWeek(d);
-      const sunday = new Date(monday);
-      sunday.setDate(sunday.getDate() + 6);
-      const startIso = monday.toISOString().slice(0, 10);
-      const endIso = sunday.toISOString().slice(0, 10);
+      const sunday = startOfWeek(d);
+      const saturday = new Date(sunday);
+      saturday.setDate(saturday.getDate() + 6);
+      const startIso = sunday.toISOString().slice(0, 10);
+      const endIso = saturday.toISOString().slice(0, 10);
+      const wnum = weekOfMonth(sunday);
+      const monthName = SHORT_MONTH_NAMES[sunday.getMonth()];
       return {
-        label: `S${weekOfYear(d)}`,
-        fullLabel: `Semana ${weekOfYear(d)} (${startIso} a ${endIso})`,
+        label: `S${wnum}/${monthName}`,
+        fullLabel: `Semana ${wnum} de ${monthName} (${startIso} a ${endIso})`,
         contains: (date) => {
           const iso = String(date).slice(0, 10);
           return iso >= startIso && iso <= endIso;
@@ -1647,11 +1753,21 @@ function buildBuckets(period, anchor) {
 function startOfWeek(date) {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = (day + 6) % 7;
-  d.setDate(d.getDate() - diff);
+  d.setDate(d.getDate() - day);
   d.setHours(0, 0, 0, 0);
   return d;
 }
+
+function weekOfMonth(date) {
+  const d = new Date(date);
+  const sunday = startOfWeek(d);
+  const firstOfMonth = new Date(sunday.getFullYear(), sunday.getMonth(), 1);
+  const firstSunday = startOfWeek(firstOfMonth);
+  const diffDays = Math.round((sunday - firstSunday) / 86400000);
+  return Math.floor(diffDays / 7) + 1;
+}
+
+const SHORT_MONTH_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 function buildDailyReport() {
   const sales = entriesThatCountAsSales().filter((item) => item.date === today).reduce((sum, item) => sum + item.total, 0);
@@ -1757,39 +1873,6 @@ function matchPeriod(date, period) {
   if (period === "daily") return (current - itemDate) / 86400000 < 7;
   if (period === "weekly") return (current - itemDate) / 86400000 < 42;
   return itemDate.getFullYear() === current.getFullYear();
-}
-
-function labelMatch(date, label, period) {
-  const entryDate = new Date(date);
-  if (period === "daily") return date.slice(5) === label;
-  if (period === "weekly") return `S${weekOfYear(entryDate)}` === label;
-  return date.slice(0, 7) === label;
-}
-
-function lastDates(count) {
-  return Array.from({ length: count }, (_, index) => offsetDate(index - (count - 1)).slice(5));
-}
-
-function lastWeeks(count) {
-  return Array.from({ length: count }, (_, index) => {
-    const date = new Date(today);
-    date.setDate(date.getDate() - (count - 1 - index) * 7);
-    return `S${weekOfYear(date)}`;
-  });
-}
-
-function lastMonths(count) {
-  const base = new Date(today);
-  return Array.from({ length: count }, (_, index) => {
-    const date = new Date(base.getFullYear(), base.getMonth(), 1);
-    date.setMonth(date.getMonth() - (count - 1 - index));
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-  });
-}
-
-function weekOfYear(date) {
-  const start = new Date(date.getFullYear(), 0, 1);
-  return Math.ceil((((date - start) / 86400000) + start.getDay() + 1) / 7);
 }
 
 function salesColor(value) {
@@ -1906,62 +1989,31 @@ function renderSalePreview() {
   if (totalTarget) totalTarget.textContent = currency(total);
 }
 
-function buildFinanceAnalytics(period) {
-  const labels = period === "daily" ? lastDates(7) : period === "weekly" ? lastWeeks(6) : lastMonths(6);
-  const filtered = state.finance.filter((item) => matchPeriod(item.date, period));
-  return {
-    expenses: filtered.filter((item) => item.type === "expense").reduce((sum, item) => sum + item.amount, 0),
-    investments: filtered.filter((item) => item.type === "investment").reduce((sum, item) => sum + item.amount, 0),
-    timeline: labels.map((label) => ({
-      label,
-      expense: filtered.filter((item) => item.type === "expense" && labelMatch(item.date, label, period)).reduce((sum, item) => sum + item.amount, 0),
-      investment: filtered.filter((item) => item.type === "investment" && labelMatch(item.date, label, period)).reduce((sum, item) => sum + item.amount, 0)
-    }))
-  };
-}
+function buildFinanceAnalytics(period, anchor = today) {
+  const buckets = buildBuckets(period, anchor);
+  const expenseEntries = state.finance.filter((item) => item.type === "expense");
+  const investmentEntries = state.finance.filter((item) => item.type === "investment");
+  const inAnyBucket = (date) => buckets.some((b) => b.contains(date));
+  const filteredExpenses = expenseEntries.filter((item) => inAnyBucket(item.date));
+  const filteredInvestments = investmentEntries.filter((item) => inAnyBucket(item.date));
 
-function buildLineChartSvg(readings, values, metric, minValue, maxValue) {
-  const width = 640;
-  const height = 280;
-  const paddingX = 42;
-  const paddingY = 28;
-  const range = Math.max(maxValue - minValue, 1);
-  const points = values.map((value, index) => {
-    const x = paddingX + (index * (width - paddingX * 2)) / Math.max(values.length - 1, 1);
-    const y = height - paddingY - ((value - minValue) / range) * (height - paddingY * 2);
-    return { x, y, value, label: readings[index].date.slice(5) };
+  const timeline = buckets.map((bucket) => {
+    const expenses = expenseEntries.filter((item) => bucket.contains(item.date)).reduce((sum, item) => sum + item.amount, 0);
+    const investments = investmentEntries.filter((item) => bucket.contains(item.date)).reduce((sum, item) => sum + item.amount, 0);
+    return {
+      label: bucket.label,
+      fullLabel: bucket.fullLabel,
+      expenses,
+      investments,
+      impact: expenses + investments
+    };
   });
 
-  const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-  const area = `${path} L ${points[points.length - 1].x} ${height - paddingY} L ${points[0].x} ${height - paddingY} Z`;
-  const stroke = metric === "ph" ? "#1aa8d8" : metric === "tds" ? "#126f95" : "#289b65";
-
-  const grid = Array.from({ length: 4 }, (_, index) => {
-    const y = paddingY + ((height - paddingY * 2) * index) / 3;
-    return `<line x1="${paddingX}" y1="${y}" x2="${width - paddingX}" y2="${y}" stroke="rgba(16,49,77,0.12)" stroke-dasharray="4 6" />`;
-  }).join("");
-
-  const labels = points.map((point) => `<text x="${point.x}" y="${height - 8}" text-anchor="middle" font-size="11" fill="#647788">${point.label}</text>`).join("");
-  const dots = points.map((point) => `
-    <circle cx="${point.x}" cy="${point.y}" r="5" fill="${stroke}" />
-    <circle cx="${point.x}" cy="${point.y}" r="10" fill="transparent">
-      <title>${formatMetricValue(metric, point.value)}</title>
-    </circle>
-  `).join("");
-
-  return `
-    <defs>
-      <linearGradient id="waterAreaGradient" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0%" stop-color="${stroke}" stop-opacity="0.28" />
-        <stop offset="100%" stop-color="${stroke}" stop-opacity="0.02" />
-      </linearGradient>
-    </defs>
-    ${grid}
-    <path d="${area}" fill="url(#waterAreaGradient)"></path>
-    <path d="${path}" fill="none" stroke="${stroke}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
-    ${dots}
-    ${labels}
-  `;
+  return {
+    expenses: filteredExpenses.reduce((sum, item) => sum + item.amount, 0),
+    investments: filteredInvestments.reduce((sum, item) => sum + item.amount, 0),
+    timeline
+  };
 }
 
 function formatMetricValue(metric, value) {

@@ -473,23 +473,23 @@ svg {
   border: 1px solid rgba(26, 168, 216, 0.14);
 }
 
-#salesChartSvg {
+.chart-svg {
   width: 100%;
   height: 320px;
   display: block;
   overflow: visible;
 }
 
-#salesChartSvg .chart-bar {
+.chart-svg .chart-bar {
   cursor: pointer;
   transition: opacity 0.18s ease;
 }
 
-#salesChartSvg .chart-bar:hover {
+.chart-svg .chart-bar:hover {
   opacity: 0.82;
 }
 
-#salesChartSvg .chart-profit-dot {
+.chart-svg .chart-profit-dot {
   cursor: pointer;
 }
 
@@ -539,42 +539,6 @@ svg {
   margin-top: 6px;
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.18);
-}
-
-.chart-bars {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
-  gap: 14px;
-  align-items: end;
-  min-height: 260px;
-}
-
-.bar-column {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.bar-value {
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.bar-track {
-  width: 100%;
-  min-height: 180px;
-  padding: 8px;
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(16, 49, 77, 0.05), rgba(16, 49, 77, 0.12));
-  display: flex;
-  align-items: end;
-}
-
-.bar-fill {
-  width: 100%;
-  min-height: 10px;
-  border-radius: 14px;
 }
 
 .pie-layout {
@@ -701,65 +665,6 @@ td {
   font-size: 0.92rem;
 }
 
-.finance-chart {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-  gap: 14px;
-  align-items: end;
-  min-height: 280px;
-}
-
-.finance-column {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.finance-value-stack {
-  display: grid;
-  gap: 6px;
-  width: 100%;
-}
-
-.finance-value-chip {
-  padding: 6px 8px;
-  border-radius: 12px;
-  font-size: 0.76rem;
-  text-align: center;
-  color: white;
-}
-
-.finance-value-chip.expense { background: var(--danger); }
-.finance-value-chip.investment { background: var(--warning); color: #3b2a02; }
-
-.finance-bars-shell {
-  width: 100%;
-  min-height: 190px;
-  padding: 8px;
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(16, 49, 77, 0.05), rgba(16, 49, 77, 0.12));
-  display: flex;
-  align-items: end;
-}
-
-.finance-bars {
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  align-items: end;
-}
-
-.finance-bar {
-  width: 100%;
-  min-height: 10px;
-  border-radius: 14px 14px 8px 8px;
-}
-
-.finance-bar.expense { background: linear-gradient(180deg, #f18f82, #dc5b48); }
-.finance-bar.investment { background: linear-gradient(180deg, #f0d97d, #d4a425); }
-
 .water-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -781,17 +686,15 @@ td {
   font-size: 1.2rem;
 }
 
-.line-chart-shell {
-  min-height: 300px;
-  padding: 16px;
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(65, 210, 243, 0.08), rgba(16, 49, 77, 0.04));
-  border: 1px solid rgba(26, 168, 216, 0.14);
+.muted-label {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
-#waterLineChart {
-  width: 100%;
-  height: 280px;
+#waterLineChartLegacyHidden {
+  display: none;
   overflow: visible;
 }
 
@@ -846,36 +749,165 @@ td {
   font-size: 0.88rem;
 }
 
+.mobile-menu-toggle {
+  display: none;
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 1100;
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(13, 35, 65, 0.92);
+  color: white;
+  cursor: pointer;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  box-shadow: 0 12px 28px rgba(13, 35, 65, 0.32);
+}
+
+.mobile-menu-toggle span {
+  width: 22px;
+  height: 2px;
+  background: white;
+  border-radius: 2px;
+  transition: transform 0.25s ease, opacity 0.2s ease;
+}
+
+body.menu-open .mobile-menu-toggle span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+body.menu-open .mobile-menu-toggle span:nth-child(2) {
+  opacity: 0;
+}
+
+body.menu-open .mobile-menu-toggle span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 35, 65, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 1080;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+body.menu-open .mobile-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: 1fr;
   }
 
+  .mobile-menu-toggle {
+    display: flex;
+  }
+
+  .mobile-overlay {
+    display: block;
+  }
+
   .sidebar {
-    position: static;
-    height: auto;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(320px, 86vw);
+    height: 100vh;
+    z-index: 1090;
+    transform: translateX(-110%);
+    transition: transform 0.28s ease;
+    overflow-y: auto;
+    padding-top: 76px;
+  }
+
+  body.menu-open .sidebar {
+    transform: translateX(0);
+    box-shadow: 24px 0 40px rgba(13, 35, 65, 0.32);
+  }
+
+  .main-content {
+    padding: 76px 22px 28px;
   }
 
   .stats-grid,
   .dashboard-grid,
   .two-column,
   .integration-grid,
-  .pie-layout,
-  .finance-summary-grid,
-  .water-kpis {
+  .finance-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pie-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .water-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chart-controls {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .panel-header-stack {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .period-switch,
+  .period-nav,
+  .series-toggles {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
   }
 }
 
 @media (max-width: 760px) {
+  body {
+    font-size: 0.94rem;
+  }
+
   .main-content {
+    padding: 70px 14px 24px;
+  }
+
+  .panel {
     padding: 18px;
   }
 
-  .topbar,
+  .topbar h2,
+  .panel h3 {
+    font-size: 1.15rem;
+  }
+
   .hero-panel {
     flex-direction: column;
     align-items: stretch;
+    gap: 14px;
+  }
+
+  .hero-panel .period-switch {
+    align-self: stretch;
   }
 
   .topbar-actions {
@@ -889,7 +921,83 @@ td {
     grid-template-columns: 1fr;
   }
 
-  .finance-chart {
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  .chart-svg {
+    height: 260px;
+  }
+
+  .interactive-chart-shell {
+    min-height: 260px;
+    padding: 2px;
+  }
+
+  .chart-tooltip {
+    min-width: 170px;
+    font-size: 0.78rem;
+    padding: 10px 12px;
+  }
+
+  .stat-card,
+  .finance-stat-card {
+    padding: 14px 16px;
+  }
+
+  .water-kpi {
+    padding: 12px 14px;
+  }
+
+  .water-kpi strong {
+    font-size: 1rem;
+  }
+
+  .period-button {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+
+  .period-anchor-input {
+    width: 100%;
+    flex: 1 1 140px;
+  }
+
+  .period-nav {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .series-toggle {
+    font-size: 0.78rem;
+    padding: 5px 10px;
+  }
+
+  .table-container {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 460px) {
+  .water-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .chart-svg {
+    height: 220px;
+  }
+
+  .interactive-chart-shell {
+    min-height: 220px;
+  }
+
+  .pie-chart-disc {
+    width: 150px;
+    height: 150px;
+  }
+
+  .brand-logo {
+    width: 56px;
+    height: 56px;
+  }
+
+  .sidebar-title {
+    font-size: 1.05rem;
   }
 }

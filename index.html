@@ -12,8 +12,12 @@
   <script src="app.js" defer></script>
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar">
+  <div class="app-shell" id="appShell">
+    <button type="button" class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="mobile-overlay" id="mobileOverlay"></div>
+    <aside class="sidebar" id="sidebar">
       <div class="brand brand-visual">
         <img src="assets/logo.png" alt="Logo AGUA CRISTALINA" class="brand-logo">
         <div class="brand-support">
@@ -93,7 +97,7 @@
               </div>
             </div>
             <div class="interactive-chart-shell">
-              <svg id="salesChartSvg" viewBox="0 0 880 320" preserveAspectRatio="none"></svg>
+              <svg id="salesChartSvg" class="chart-svg" viewBox="0 0 880 320" preserveAspectRatio="none"></svg>
               <div class="chart-tooltip" id="salesChartTooltip"></div>
             </div>
           </section>
@@ -380,20 +384,38 @@
       </section>
 
       <section class="view" id="financas">
-        <section class="panel">
-          <div class="panel-header">
+        <section class="panel panel-wide">
+          <div class="panel-header panel-header-stack">
             <div>
               <p class="card-label">Analise financeira</p>
               <h3>Despesas e investimentos por periodo</h3>
+              <small id="financeRangeLabel" class="muted-label"></small>
             </div>
-            <div class="period-switch" id="financePeriodSwitch">
-              <button class="period-button active" data-finance-period="daily">Dia</button>
-              <button class="period-button" data-finance-period="weekly">Semana</button>
-              <button class="period-button" data-finance-period="monthly">Mes</button>
+            <div class="chart-controls">
+              <div class="period-switch" id="financePeriodSwitch">
+                <button class="period-button active" data-finance-period="daily">Diario</button>
+                <button class="period-button" data-finance-period="weekly">Semanal</button>
+                <button class="period-button" data-finance-period="monthly">Mensal</button>
+                <button class="period-button" data-finance-period="yearly">Anual</button>
+              </div>
+              <div class="period-nav">
+                <button type="button" class="ghost-button nav-arrow" id="financePeriodPrev" aria-label="Anterior">&#8249;</button>
+                <input type="date" id="financeAnchor" class="period-anchor-input" />
+                <button type="button" class="ghost-button nav-arrow" id="financePeriodNext" aria-label="Seguinte">&#8250;</button>
+                <button type="button" class="ghost-button" id="financePeriodToday">Hoje</button>
+              </div>
+              <div class="series-toggles" id="financeSeriesToggles">
+                <label class="series-toggle"><input type="checkbox" data-finance-series="expenses" checked><span class="series-dot expenses"></span>Despesas</label>
+                <label class="series-toggle"><input type="checkbox" data-finance-series="investments" checked><span class="series-dot investment"></span>Investimentos</label>
+                <label class="series-toggle"><input type="checkbox" data-finance-series="impact" checked><span class="series-dot profit"></span>Impacto</label>
+              </div>
             </div>
           </div>
           <div class="finance-summary-grid" id="financeSummaryCards"></div>
-          <div class="finance-chart" id="financeChart"></div>
+          <div class="interactive-chart-shell">
+            <svg id="financeChartSvg" class="chart-svg" viewBox="0 0 880 320" preserveAspectRatio="none"></svg>
+            <div class="chart-tooltip" id="financeChartTooltip"></div>
+          </div>
         </section>
 
         <div class="two-column">
@@ -441,21 +463,25 @@
       </section>
 
       <section class="view" id="agua">
-        <section class="panel water-trend-panel">
-          <div class="panel-header">
+        <section class="panel panel-wide water-trend-panel">
+          <div class="panel-header panel-header-stack">
             <div>
               <p class="card-label">Qualidade da agua</p>
               <h3>Tendencia tecnica</h3>
+              <small id="waterRangeLabel" class="muted-label"></small>
             </div>
-            <div class="period-switch" id="waterMetricSwitch">
-              <button class="period-button active" data-water-metric="ph">pH</button>
-              <button class="period-button" data-water-metric="tds">TDS</button>
-              <button class="period-button" data-water-metric="temperature">Temperatura</button>
+            <div class="chart-controls">
+              <div class="period-switch" id="waterMetricSwitch">
+                <button class="period-button active" data-water-metric="ph">pH</button>
+                <button class="period-button" data-water-metric="tds">TDS</button>
+                <button class="period-button" data-water-metric="temperature">Temperatura</button>
+              </div>
             </div>
           </div>
           <div class="water-kpis" id="waterKpis"></div>
-          <div class="line-chart-shell">
-            <svg id="waterLineChart" viewBox="0 0 640 280" preserveAspectRatio="none"></svg>
+          <div class="interactive-chart-shell">
+            <svg id="waterChartSvg" class="chart-svg" viewBox="0 0 880 320" preserveAspectRatio="none"></svg>
+            <div class="chart-tooltip" id="waterChartTooltip"></div>
           </div>
         </section>
 
