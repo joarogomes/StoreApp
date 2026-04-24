@@ -765,10 +765,8 @@ function renderClients() {
       <form class="client-adjust-form" data-client-id="${client.id}">
         <input type="number" name="amount" min="0.01" step="0.01" placeholder="Valor (Kz)" required>
         <select name="action" aria-label="Tipo de ajuste">
-          <option value="deposit">+ Saldo</option>
-          <option value="withdrawal">- Saldo</option>
-          <option value="debt">+ Divida</option>
-          <option value="settlement">- Divida</option>
+          <option value="deposit">Saldo</option>
+          <option value="debt">Divida</option>
         </select>
         <button class="primary-button" type="submit">Aplicar</button>
       </form>
@@ -790,18 +788,10 @@ async function onAdjustClient(form) {
 
   if (action === "deposit") {
     client.balance = (client.balance || 0) + amount;
-  } else if (action === "withdrawal") {
-    if ((client.balance || 0) < amount) {
-      return alert(`Saldo insuficiente. Saldo atual: ${currency(client.balance || 0)}.`);
-    }
-    client.balance -= amount;
   } else if (action === "debt") {
     client.debt = (client.debt || 0) + amount;
-  } else if (action === "settlement") {
-    if ((client.debt || 0) < amount) {
-      return alert(`Divida insuficiente. Divida atual: ${currency(client.debt || 0)}.`);
-    }
-    client.debt -= amount;
+  } else {
+    return;
   }
 
   await persistMutation({
