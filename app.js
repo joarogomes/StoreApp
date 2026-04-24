@@ -33,9 +33,9 @@ const baseProducts = [
 
 const demoData = {
   clients: [
-    { id: crypto.randomUUID(), name: "Maria Domingos", phone: "+244923111222", address: "Benfica", balance: 3500 },
-    { id: crypto.randomUUID(), name: "Carlos Mateus", phone: "+244924333444", address: "Viana", balance: 0 },
-    { id: crypto.randomUUID(), name: "Escola Sol Nascente", phone: "+244925777888", address: "Kilamba", balance: 6000 }
+    { id: crypto.randomUUID(), name: "Maria Domingos", phone: "+244923111222", address: "Benfica", balance: 3500, debt: 0 },
+    { id: crypto.randomUUID(), name: "Carlos Mateus", phone: "+244924333444", address: "Viana", balance: 0, debt: 1500 },
+    { id: crypto.randomUUID(), name: "Escola Sol Nascente", phone: "+244925777888", address: "Kilamba", balance: 6000, debt: 0 }
   ],
   stock: [
     { id: crypto.randomUUID(), productId: "dispenser", quantity: 8, unitCost: 2600 },
@@ -62,12 +62,16 @@ const demoData = {
 let state = loadState();
 let productCatalog = loadProductCatalog();
 let currentPeriod = "daily";
+let periodAnchor = today;
+let activeSeries = { sales: true, expenses: true, profit: true };
 let financePeriod = "daily";
 let waterMetric = "ph";
 let supabaseConfig = loadSupabaseConfig();
 let supabaseClient = null;
 let currentStore = null;
 let syncState = { tone: "warning", text: "Modo local. Configure o Supabase para sincronizar." };
+
+migrateClientsForDebt();
 
 const views = [...document.querySelectorAll(".view")];
 const navTabs = [...document.querySelectorAll(".nav-tab")];
@@ -139,6 +143,28 @@ function bindNavigation() {
     button.addEventListener("click", () => {
       currentPeriod = button.dataset.period;
       dashboardPeriodButtons.forEach((item) => item.classList.toggle("active", item === button));
+      renderDashboard();
+    });
+  });
+
+  document.getElementById("periodPrev")?.addEventListener("click", () => shiftPeriodAnchor(-1));
+  document.getElementById("periodNext")?.addEventListener("click", () => shiftPeriodAnchor(1));
+  document.getElementById("periodToday")?.addEventListener("click", () => {
+    periodAnchor = today;
+    syncAnchorInput();
+    renderDashboard();
+  });
+  document.getElementById("periodAnchor")?.addEventListener("change", (event) => {
+    const value = event.target.value;
+    if (value) {
+      periodAnchor = value;
+      renderDashboard();
+    }
+  });
+
+  document.querySelectorAll("#seriesToggles input[type=checkbox]").forEach((input) => {
+    input.addEventListener("change", () => {
+      activeSeries[input.dataset.series] = input.checked;
       renderDashboard();
     });
   });
@@ -294,13 +320,52 @@ function fillOptionalSelect(id, items, placeholder) {
 }
 
 function renderDashboard() {
-  const stats = buildPeriodStats(currentPeriod);
+  syncAnchorInput();
+  const stats = buildPeriodStats(currentPeriod, periodAnchor);
   renderMetricCards(stats);
-  renderSalesChart(stats.timeline);
+  renderInteractiveSalesChart(stats.timeline);
+  renderPeriodRangeLabel(stats.timeline);
   renderProductPie(stats.productTotals);
   renderPaymentBreakdown(stats.paymentTotals);
   renderClientBalances();
   renderWaterSummary();
+}
+
+function syncAnchorInput() {
+  const input = document.getElementById("periodAnchor");
+  if (input && input.value !== periodAnchor) input.value = periodAnchor;
+}
+
+function shiftPeriodAnchor(direction) {
+  const date = new Date(periodAnchor);
+  if (currentPeriod === "daily") {
+    date.setDate(date.getDate() + direction);
+  } else if (currentPeriod === "weekly") {
+    date.setDate(date.getDate() + direction * 7);
+  } else if (currentPeriod === "monthly") {
+    addMonthsSafely(date, direction);
+  } else {
+    addMonthsSafely(date, direction * 12);
+  }
+  periodAnchor = date.toISOString().slice(0, 10);
+  renderDashboard();
+}
+
+function addMonthsSafely(date, months) {
+  const day = date.getDate();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + months);
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(day, lastDay));
+}
+
+function renderPeriodRangeLabel(timeline) {
+  const target = document.getElementById("periodRangeLabel");
+  if (!target || !timeline.length) return;
+  const first = timeline[0];
+  const last = timeline[timeline.length - 1];
+  const periodLabel = ({ daily: "dias", weekly: "semanas", monthly: "meses", yearly: "anos" })[currentPeriod];
+  target.textContent = `Visualizando ${timeline.length} ${periodLabel} - ${first.label} a ${last.label}`;
 }
 
 function renderMetricCards(stats) {
@@ -324,33 +389,170 @@ function renderMetricCards(stats) {
   });
 }
 
-function renderSalesChart(timeline) {
-  const chart = document.getElementById("salesChart");
-  chart.innerHTML = "";
-  const max = Math.max(...timeline.map((item) => item.value), 25000);
+function renderInteractiveSalesChart(timeline) {
+  const svg = document.getElementById("salesChartSvg");
+  const tooltip = document.getElementById("salesChartTooltip");
+  if (!svg) return;
+  svg.innerHTML = "";
+  if (tooltip) tooltip.style.opacity = "0";
 
-  timeline.forEach((point) => {
-    const column = document.createElement("div");
-    column.className = "bar-column";
+  if (!timeline.length) return;
 
-    const value = document.createElement("div");
-    value.className = "bar-value";
-    value.textContent = currency(point.value);
+  const width = 880;
+  const height = 320;
+  const paddingLeft = 60;
+  const paddingRight = 24;
+  const paddingTop = 24;
+  const paddingBottom = 48;
+  const innerWidth = width - paddingLeft - paddingRight;
+  const innerHeight = height - paddingTop - paddingBottom;
 
-    const track = document.createElement("div");
-    track.className = "bar-track";
+  const showSales = activeSeries.sales;
+  const showExpenses = activeSeries.expenses;
+  const showProfit = activeSeries.profit;
 
-    const fill = document.createElement("div");
-    fill.className = "bar-fill";
-    fill.style.height = `${Math.max((point.value / max) * 100, 6)}%`;
-    fill.style.background = salesColor(point.value);
-    track.appendChild(fill);
-
-    const label = document.createElement("strong");
-    label.textContent = point.label;
-    column.append(value, track, label);
-    chart.appendChild(column);
+  const numbers = timeline.flatMap((point) => {
+    const arr = [];
+    if (showSales) arr.push(point.sales);
+    if (showExpenses) arr.push(point.expenses);
+    if (showProfit) arr.push(point.profit);
+    return arr;
   });
+
+  const dataMax = numbers.length ? Math.max(...numbers, 1000) : 1000;
+  const dataMin = numbers.length ? Math.min(...numbers, 0) : 0;
+  const yMax = niceCeil(Math.max(dataMax, 1000));
+  const yMin = dataMin < 0 ? niceFloor(dataMin) : 0;
+  const range = Math.max(yMax - yMin, 1);
+
+  const slotWidth = innerWidth / timeline.length;
+  const showBoth = showSales && showExpenses;
+  const barGroupW = slotWidth * 0.6;
+  const barW = showBoth ? barGroupW / 2 - 2 : barGroupW;
+
+  const yFor = (value) => paddingTop + innerHeight - ((value - yMin) / range) * innerHeight;
+
+  const gridLines = [];
+  const ticks = 4;
+  for (let i = 0; i <= ticks; i++) {
+    const value = yMin + ((yMax - yMin) * i) / ticks;
+    const y = yFor(value);
+    gridLines.push(`<line x1="${paddingLeft}" y1="${y}" x2="${width - paddingRight}" y2="${y}" stroke="rgba(16,49,77,0.10)" stroke-dasharray="4 6"/>`);
+    gridLines.push(`<text x="${paddingLeft - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#647788">${formatShortNumber(value)}</text>`);
+  }
+
+  const xLabels = [];
+  const bars = [];
+  const profitPoints = [];
+
+  timeline.forEach((point, index) => {
+    const slotX = paddingLeft + slotWidth * index + slotWidth / 2;
+    xLabels.push(`<text x="${slotX}" y="${height - paddingBottom + 18}" text-anchor="middle" font-size="11" fill="#647788">${point.label}</text>`);
+
+    const baseY = yFor(0);
+
+    if (showSales) {
+      const x = showBoth ? slotX - barW - 1 : slotX - barW / 2;
+      const yTop = yFor(point.sales);
+      const h = Math.max(baseY - yTop, 0);
+      bars.push(`<rect class="chart-bar bar-sales" data-index="${index}" x="${x}" y="${yTop}" width="${barW}" height="${h}" rx="6" fill="${salesBarFill(point.sales)}"/>`);
+    }
+
+    if (showExpenses) {
+      const x = showBoth ? slotX + 1 : slotX - barW / 2;
+      const yTop = yFor(point.expenses);
+      const h = Math.max(baseY - yTop, 0);
+      bars.push(`<rect class="chart-bar bar-expenses" data-index="${index}" x="${x}" y="${yTop}" width="${barW}" height="${h}" rx="6" fill="url(#expensesBarGradient)"/>`);
+    }
+
+    if (showProfit) {
+      profitPoints.push({ x: slotX, y: yFor(point.profit), value: point.profit, index });
+    }
+
+    bars.push(`<rect class="chart-hover-zone" data-index="${index}" x="${paddingLeft + slotWidth * index}" y="${paddingTop}" width="${slotWidth}" height="${innerHeight}" fill="transparent"/>`);
+  });
+
+  let profitSvg = "";
+  if (showProfit && profitPoints.length) {
+    const path = profitPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+    const dots = profitPoints.map((p) => `<circle class="chart-profit-dot" data-index="${p.index}" cx="${p.x}" cy="${p.y}" r="5" fill="#7e6dff" stroke="white" stroke-width="2"/>`).join("");
+    profitSvg = `
+      <path d="${path}" fill="none" stroke="#7e6dff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+    `;
+  }
+
+  const baselineY = yFor(0);
+  const baseline = yMin < 0 ? `<line x1="${paddingLeft}" y1="${baselineY}" x2="${width - paddingRight}" y2="${baselineY}" stroke="rgba(16,49,77,0.30)" stroke-width="1.2"/>` : "";
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="expensesBarGradient" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" stop-color="#f5a293"/>
+        <stop offset="100%" stop-color="#dc5b48"/>
+      </linearGradient>
+    </defs>
+    ${gridLines.join("")}
+    ${baseline}
+    ${bars.join("")}
+    ${profitSvg}
+    ${xLabels.join("")}
+  `;
+
+  if (!tooltip) return;
+
+  const showTooltip = (event, index) => {
+    const point = timeline[index];
+    if (!point) return;
+    tooltip.innerHTML = `
+      <strong>${point.fullLabel || point.label}</strong>
+      <div class="tip-row"><span><span class="series-dot sales"></span>Vendas</span><b>${currency(point.sales)}</b></div>
+      <div class="tip-row"><span><span class="series-dot expenses"></span>Despesas</span><b>${currency(point.expenses)}</b></div>
+      <div class="tip-row"><span><span class="series-dot investment"></span>Investimentos</span><b>${currency(point.investments)}</b></div>
+      <div class="tip-row tip-row-total"><span><span class="series-dot profit"></span>Lucro</span><b>${currency(point.profit)}</b></div>
+    `;
+    const shell = svg.parentElement.getBoundingClientRect();
+    const x = event.clientX - shell.left;
+    const y = event.clientY - shell.top;
+    tooltip.style.left = `${Math.min(Math.max(x + 12, 12), shell.width - 220)}px`;
+    tooltip.style.top = `${Math.max(y - 90, 12)}px`;
+    tooltip.style.opacity = "1";
+  };
+
+  const hideTooltip = () => { tooltip.style.opacity = "0"; };
+
+  svg.querySelectorAll(".chart-hover-zone, .chart-bar, .chart-profit-dot").forEach((el) => {
+    el.addEventListener("mousemove", (event) => showTooltip(event, Number(el.dataset.index)));
+    el.addEventListener("mouseleave", hideTooltip);
+  });
+}
+
+function salesBarFill(value) {
+  if (value < 17000) return "#dc5b48";
+  if (value <= 25000) return "#d4a425";
+  return "#289b65";
+}
+
+function niceCeil(value) {
+  if (value <= 0) return 1000;
+  const exp = Math.pow(10, Math.floor(Math.log10(value)));
+  const norm = value / exp;
+  let m = 1;
+  if (norm > 5) m = 10;
+  else if (norm > 2) m = 5;
+  else if (norm > 1) m = 2;
+  return m * exp;
+}
+
+function niceFloor(value) {
+  return -niceCeil(Math.abs(value));
+}
+
+function formatShortNumber(value) {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(abs >= 10_000 ? 0 : 1)}k`;
+  return Math.round(value).toString();
 }
 
 function renderPaymentBreakdown(paymentTotals) {
@@ -369,11 +571,21 @@ function renderClientBalances() {
   target.innerHTML = "";
 
   [...state.clients]
-    .sort((a, b) => b.balance - a.balance)
+    .sort((a, b) => (b.balance + (b.debt || 0)) - (a.balance + (a.debt || 0)))
     .forEach((client) => {
       const row = document.createElement("div");
       row.className = "list-row";
-      row.innerHTML = `<div><strong>${client.name}</strong><small>${client.phone || ""}</small></div><span class="badge ${client.balance > 0 ? "warning" : "success"}">${currency(client.balance)}</span>`;
+      const debt = client.debt || 0;
+      row.innerHTML = `
+        <div>
+          <strong>${client.name}</strong>
+          <small>${client.phone || ""}</small>
+        </div>
+        <div class="balance-stack">
+          <span class="badge ${client.balance > 0 ? "success" : "muted"}">Saldo: ${currency(client.balance)}</span>
+          ${debt > 0 ? `<span class="badge danger">Divida: ${currency(debt)}</span>` : ""}
+        </div>
+      `;
       target.appendChild(row);
     });
 }
@@ -476,12 +688,16 @@ function renderClients() {
   state.clients.forEach((client) => {
     const row = document.createElement("div");
     row.className = "list-row";
+    const debt = client.debt || 0;
     row.innerHTML = `
       <div>
         <strong>${client.name}</strong>
         <small>${client.phone || ""} | ${client.address || ""}</small>
       </div>
-      <span class="badge ${client.balance > 0 ? "warning" : "success"}">${currency(client.balance)}</span>
+      <div class="balance-stack">
+        <span class="badge ${client.balance > 0 ? "success" : "muted"}">Saldo: ${currency(client.balance)}</span>
+        <span class="badge ${debt > 0 ? "danger" : "muted"}">Divida: ${currency(debt)}</span>
+      </div>
     `;
     target.appendChild(row);
   });
@@ -686,13 +902,17 @@ async function onCreateSale(event) {
   const client = findClient(clientId);
 
   if (!product) return alert("Escolha um produto.");
-  if ((entryType === "deposit" || entryType === "withdrawal" || paymentMethod === "Saldo do cliente") && !client) {
-    return alert("Selecione um cliente para deposito, levantamento ou uso de saldo.");
+  if (
+    (entryType === "deposit" || entryType === "withdrawal" || entryType === "debt" || entryType === "settlement" || paymentMethod === "Saldo do cliente") &&
+    !client
+  ) {
+    return alert("Selecione um cliente para deposito, levantamento, divida, liquidacao ou uso de saldo.");
   }
 
   let costTotal = 0;
   let movement = null;
-  if (product.stockControlled && entryType === "sale") {
+  // Stock movement also applies when client takes goods on credit (debt)
+  if (product.stockControlled && (entryType === "sale" || entryType === "debt")) {
     const stockItem = findStockByProduct(productId);
     if (!stockItem || stockItem.quantity < quantity) {
       return alert("Estoque insuficiente para este produto.");
@@ -708,6 +928,15 @@ async function onCreateSale(event) {
   if (entryType === "withdrawal") {
     if (client.balance < total) return alert("Saldo do cliente insuficiente.");
     client.balance -= total;
+  }
+  if (entryType === "debt" && client) {
+    client.debt = (client.debt || 0) + total;
+  }
+  if (entryType === "settlement" && client) {
+    if ((client.debt || 0) < total) {
+      return alert(`Divida do cliente insuficiente. Divida atual: ${currency(client.debt || 0)}.`);
+    }
+    client.debt -= total;
   }
   if (entryType === "sale" && paymentMethod === "Saldo do cliente") {
     if (client.balance < total) return alert("Saldo do cliente insuficiente para concluir a venda.");
@@ -786,7 +1015,8 @@ async function onCreateClient(event) {
     name: String(form.get("name")),
     phone: String(form.get("phone")),
     address: String(form.get("address")),
-    balance: 0
+    balance: 0,
+    debt: 0
   });
 
   await persistMutation({
@@ -1101,7 +1331,8 @@ function normalizeClientRow(row) {
     name: row.name ?? "Cliente",
     phone: row.phone ?? "",
     address: row.address ?? "",
-    balance: toNumber(row.balance ?? 0)
+    balance: toNumber(row.balance ?? 0),
+    debt: toNumber(row.debt ?? 0)
   };
 }
 
@@ -1203,7 +1434,8 @@ function serializeClientRow(client) {
     name: client.name,
     phone: client.phone || null,
     address: client.address || null,
-    balance: client.balance ?? 0
+    balance: client.balance ?? 0,
+    debt: client.debt ?? 0
   };
 }
 
@@ -1254,9 +1486,9 @@ function serializeSaleRow(sale) {
     profit: sale.total - costTotal,
     payment_method: normalizeWritablePaymentMethod(sale.paymentMethod),
     entry_type: sale.entryType,
-    counts_as_sale: sale.entryType !== "withdrawal",
+    counts_as_sale: sale.entryType !== "withdrawal" && sale.entryType !== "debt",
     customer_name: client?.name || sale.customerName || null,
-    notes: sale.entryType === "deposit" ? "Deposito do cliente" : sale.entryType === "withdrawal" ? "Levantamento do saldo" : null,
+    notes: ({ deposit: "Deposito do cliente", withdrawal: "Levantamento do saldo", debt: "Divida do cliente", settlement: "Liquidacao de divida" })[sale.entryType] || null,
     sale_date: sale.date
   };
 }
@@ -1309,32 +1541,116 @@ function serializeMaintenanceRow(item) {
   };
 }
 
-function buildPeriodStats(period) {
-  const labels = period === "daily" ? lastDates(7) : period === "weekly" ? lastWeeks(6) : lastMonths(6);
+function buildPeriodStats(period, anchor = today) {
+  const buckets = buildBuckets(period, anchor);
   const salesEntries = entriesThatCountAsSales();
-  const filteredEntries = salesEntries.filter((item) => matchPeriod(item.date, period));
-  const salesTotal = filteredEntries.reduce((sum, item) => sum + item.total, 0);
-  const expenses = sumFinanceByType("expense", period);
-  const investments = sumFinanceByType("investment", period);
-  const paymentTotals = groupPayments(filteredEntries);
+  const expenseEntries = state.finance.filter((item) => item.type === "expense");
+  const investmentEntries = state.finance.filter((item) => item.type === "investment");
+
+  const inAnyBucket = (date) => buckets.some((b) => b.contains(date));
+  const filteredSales = salesEntries.filter((item) => inAnyBucket(item.date));
+  const filteredExpenses = expenseEntries.filter((item) => inAnyBucket(item.date));
+  const filteredInvestments = investmentEntries.filter((item) => inAnyBucket(item.date));
+
+  const salesTotal = filteredSales.reduce((sum, item) => sum + item.total, 0);
+  const expensesTotal = filteredExpenses.reduce((sum, item) => sum + item.amount, 0);
+  const investmentsTotal = filteredInvestments.reduce((sum, item) => sum + item.amount, 0);
+  const paymentTotals = groupPayments(filteredSales);
+
+  const timeline = buckets.map((bucket) => {
+    const sales = salesEntries.filter((item) => bucket.contains(item.date)).reduce((sum, item) => sum + item.total, 0);
+    const expenses = expenseEntries.filter((item) => bucket.contains(item.date)).reduce((sum, item) => sum + item.amount, 0);
+    const investments = investmentEntries.filter((item) => bucket.contains(item.date)).reduce((sum, item) => sum + item.amount, 0);
+    return {
+      label: bucket.label,
+      fullLabel: bucket.fullLabel,
+      sales,
+      expenses,
+      investments,
+      profit: sales - expenses - investments
+    };
+  });
 
   return {
     salesTotal,
-    salesCount: filteredEntries.length,
-    expenses,
-    investments,
-    profit: salesTotal - expenses - investments,
+    salesCount: filteredSales.length,
+    expenses: expensesTotal,
+    investments: investmentsTotal,
+    profit: salesTotal - expensesTotal - investmentsTotal,
     paymentTotals,
-    productTotals: filteredEntries.reduce((acc, item) => {
+    productTotals: filteredSales.reduce((acc, item) => {
       const name = findProduct(item.productId)?.name || item.productName || "Produto";
       acc[name] = (acc[name] || 0) + item.total;
       return acc;
     }, {}),
-    timeline: labels.map((label) => ({
-      label,
-      value: salesEntries.filter((item) => labelMatch(item.date, label, period)).reduce((sum, item) => sum + item.total, 0)
-    }))
+    timeline
   };
+}
+
+function buildBuckets(period, anchor) {
+  const anchorDate = new Date(anchor);
+  if (period === "daily") {
+    return Array.from({ length: 7 }, (_, idx) => {
+      const d = new Date(anchorDate);
+      d.setDate(d.getDate() - (6 - idx));
+      const iso = d.toISOString().slice(0, 10);
+      return {
+        label: iso.slice(5),
+        fullLabel: iso,
+        contains: (date) => String(date).slice(0, 10) === iso
+      };
+    });
+  }
+  if (period === "weekly") {
+    return Array.from({ length: 8 }, (_, idx) => {
+      const d = new Date(anchorDate);
+      d.setDate(d.getDate() - (7 - idx) * 7);
+      const monday = startOfWeek(d);
+      const sunday = new Date(monday);
+      sunday.setDate(sunday.getDate() + 6);
+      const startIso = monday.toISOString().slice(0, 10);
+      const endIso = sunday.toISOString().slice(0, 10);
+      return {
+        label: `S${weekOfYear(d)}`,
+        fullLabel: `Semana ${weekOfYear(d)} (${startIso} a ${endIso})`,
+        contains: (date) => {
+          const iso = String(date).slice(0, 10);
+          return iso >= startIso && iso <= endIso;
+        }
+      };
+    });
+  }
+  if (period === "monthly") {
+    return Array.from({ length: 12 }, (_, idx) => {
+      const d = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+      d.setMonth(d.getMonth() - (11 - idx));
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+      return {
+        label: `${monthNames[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`,
+        fullLabel: ym,
+        contains: (date) => String(date).slice(0, 7) === ym
+      };
+    });
+  }
+  return Array.from({ length: 5 }, (_, idx) => {
+    const year = anchorDate.getFullYear() - (4 - idx);
+    const ys = String(year);
+    return {
+      label: ys,
+      fullLabel: `Ano ${ys}`,
+      contains: (date) => String(date).slice(0, 4) === ys
+    };
+  });
+}
+
+function startOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = (day + 6) % 7;
+  d.setDate(d.getDate() - diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 function buildDailyReport() {
@@ -1408,7 +1724,20 @@ async function copyDailyReport() {
 }
 
 function entriesThatCountAsSales() {
-  return state.sales.filter((item) => item.entryType !== "withdrawal");
+  // Sale, deposit, settlement count as sales of the day.
+  // Withdrawal and debt do NOT count.
+  return state.sales.filter((item) => item.entryType !== "withdrawal" && item.entryType !== "debt");
+}
+
+function migrateClientsForDebt() {
+  let changed = false;
+  state.clients.forEach((client) => {
+    if (typeof client.debt !== "number") {
+      client.debt = 0;
+      changed = true;
+    }
+  });
+  if (changed) saveState();
 }
 
 function sumFinanceByType(type, period) {
@@ -1450,10 +1779,11 @@ function lastWeeks(count) {
 }
 
 function lastMonths(count) {
+  const base = new Date(today);
   return Array.from({ length: count }, (_, index) => {
-    const date = new Date(today);
+    const date = new Date(base.getFullYear(), base.getMonth(), 1);
     date.setMonth(date.getMonth() - (count - 1 - index));
-    return date.toISOString().slice(0, 7);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
   });
 }
 
@@ -1469,7 +1799,7 @@ function salesColor(value) {
 }
 
 function translateEntryType(type) {
-  return ({ sale: "Venda", deposit: "Deposito", withdrawal: "Levantamento" })[type] || type;
+  return ({ sale: "Venda", deposit: "Deposito", withdrawal: "Levantamento", debt: "Divida", settlement: "Liquidacao" })[type] || type;
 }
 
 function sameMonth(dateA, dateB) {

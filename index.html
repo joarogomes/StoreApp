@@ -64,20 +64,38 @@
             <button class="period-button active" data-period="daily">Diario</button>
             <button class="period-button" data-period="weekly">Semanal</button>
             <button class="period-button" data-period="monthly">Mensal</button>
+            <button class="period-button" data-period="yearly">Anual</button>
           </div>
         </div>
 
         <div class="stats-grid" id="statsGrid"></div>
 
         <div class="dashboard-grid dashboard-grid-rich">
-          <section class="panel">
-            <div class="panel-header">
+          <section class="panel panel-wide">
+            <div class="panel-header panel-header-stack">
               <div>
                 <p class="card-label">Vendas por periodo</p>
                 <h3>Performance comercial</h3>
+                <p class="helper-note" id="periodRangeLabel"></p>
+              </div>
+              <div class="chart-controls">
+                <div class="period-nav">
+                  <button class="ghost-button nav-arrow" id="periodPrev" type="button" aria-label="Periodo anterior">&lsaquo;</button>
+                  <input type="date" id="periodAnchor" class="period-anchor-input">
+                  <button class="ghost-button nav-arrow" id="periodNext" type="button" aria-label="Periodo seguinte">&rsaquo;</button>
+                  <button class="ghost-button" id="periodToday" type="button">Hoje</button>
+                </div>
+                <div class="series-toggles" id="seriesToggles">
+                  <label class="series-toggle"><input type="checkbox" data-series="sales" checked><span class="series-dot sales"></span>Vendas</label>
+                  <label class="series-toggle"><input type="checkbox" data-series="expenses" checked><span class="series-dot expenses"></span>Despesas</label>
+                  <label class="series-toggle"><input type="checkbox" data-series="profit" checked><span class="series-dot profit"></span>Lucro</label>
+                </div>
               </div>
             </div>
-            <div class="chart chart-bars" id="salesChart"></div>
+            <div class="interactive-chart-shell">
+              <svg id="salesChartSvg" viewBox="0 0 880 320" preserveAspectRatio="none"></svg>
+              <div class="chart-tooltip" id="salesChartTooltip"></div>
+            </div>
           </section>
 
           <section class="panel">
@@ -162,6 +180,8 @@
                   <option value="sale">Venda</option>
                   <option value="deposit">Deposito do cliente</option>
                   <option value="withdrawal">Levantamento do saldo</option>
+                  <option value="debt">Divida do cliente</option>
+                  <option value="settlement">Liquidacao de divida</option>
                 </select>
               </label>
               <label>
@@ -180,7 +200,7 @@
                 </article>
               </div>
 
-              <p class="helper-note full-width">Cliente opcional para venda normal. Para deposito, levantamento ou pagamento por saldo do cliente, selecione um cliente.</p>
+              <p class="helper-note full-width">Cliente opcional para venda normal. Para deposito, levantamento, divida, liquidacao ou pagamento por saldo do cliente, selecione um cliente. Deposito conta como venda do dia. Levantamento e divida nao contam. Liquidacao de divida conta como venda do dia.</p>
               <button class="primary-button" type="submit">Guardar movimento</button>
             </form>
           </section>

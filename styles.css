@@ -371,6 +371,175 @@ svg {
 .badge.success { background: rgba(40, 155, 101, 0.14); color: var(--success); }
 .badge.warning { background: rgba(212, 164, 37, 0.16); color: #977009; }
 .badge.danger { background: rgba(220, 91, 72, 0.14); color: var(--danger); }
+.badge.muted { background: rgba(100, 119, 136, 0.14); color: var(--muted); }
+
+.balance-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.panel-header-stack {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.chart-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.period-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(16, 49, 77, 0.06);
+}
+
+.period-nav .nav-arrow,
+.period-nav .ghost-button {
+  padding: 8px 12px;
+  font-weight: 700;
+  border-radius: 12px;
+}
+
+.period-nav .nav-arrow {
+  width: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.period-anchor-input {
+  width: 150px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.series-toggles {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.series-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--line);
+  font-size: 0.82rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.series-toggle input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.series-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.series-dot.sales { background: linear-gradient(135deg, #62c595, #289b65); }
+.series-dot.expenses { background: linear-gradient(135deg, #f5a293, #dc5b48); }
+.series-dot.investment { background: linear-gradient(135deg, #f0d97d, #d4a425); }
+.series-dot.profit { background: #7e6dff; }
+
+.interactive-chart-shell {
+  position: relative;
+  width: 100%;
+  min-height: 320px;
+  padding: 4px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(65, 210, 243, 0.08), rgba(16, 49, 77, 0.04));
+  border: 1px solid rgba(26, 168, 216, 0.14);
+}
+
+#salesChartSvg {
+  width: 100%;
+  height: 320px;
+  display: block;
+  overflow: visible;
+}
+
+#salesChartSvg .chart-bar {
+  cursor: pointer;
+  transition: opacity 0.18s ease;
+}
+
+#salesChartSvg .chart-bar:hover {
+  opacity: 0.82;
+}
+
+#salesChartSvg .chart-profit-dot {
+  cursor: pointer;
+}
+
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  min-width: 200px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(13, 35, 65, 0.95);
+  color: #f5fbff;
+  box-shadow: 0 16px 32px rgba(13, 35, 65, 0.32);
+  font-size: 0.84rem;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 10;
+}
+
+.chart-tooltip strong {
+  display: block;
+  margin-bottom: 8px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.95rem;
+  color: white;
+}
+
+.chart-tooltip .tip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.chart-tooltip .tip-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(245, 251, 255, 0.78);
+}
+
+.chart-tooltip .tip-row b {
+  font-weight: 700;
+}
+
+.chart-tooltip .tip-row-total {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
 
 .chart-bars {
   display: grid;
