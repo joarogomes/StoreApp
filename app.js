@@ -198,6 +198,12 @@ function bindNavigation() {
 function bindForms() {
   document.getElementById("saleForm")?.addEventListener("submit", onCreateSale);
   document.getElementById("clientForm")?.addEventListener("submit", onCreateClient);
+  document.getElementById("clientsList")?.addEventListener("submit", (event) => {
+    const form = event.target.closest(".client-adjust-form");
+    if (!form) return;
+    event.preventDefault();
+    onAdjustClient(form);
+  });
   document.getElementById("productForm")?.addEventListener("submit", onCreateProduct);
   document.getElementById("stockForm")?.addEventListener("submit", onUpdateStock);
   document.getElementById("financeForm")?.addEventListener("submit", onFinanceEntry);
@@ -743,20 +749,67 @@ function renderClients() {
 
   state.clients.forEach((client) => {
     const row = document.createElement("div");
-    row.className = "list-row";
+    row.className = "list-row client-row";
     const debt = client.debt || 0;
     row.innerHTML = `
-      <div>
-        <strong>${client.name}</strong>
-        <small>${client.phone || ""} | ${client.address || ""}</small>
+      <div class="client-row-info">
+        <div>
+          <strong>${client.name}</strong>
+          <small>${client.phone || ""} | ${client.address || ""}</small>
+        </div>
+        <div class="balance-stack">
+          <span class="badge ${client.balance > 0 ? "success" : "muted"}">Saldo: ${currency(client.balance)}</span>
+          <span class="badge ${debt > 0 ? "danger" : "muted"}">Divida: ${currency(debt)}</span>
+        </div>
       </div>
-      <div class="balance-stack">
-        <span class="badge ${client.balance > 0 ? "success" : "muted"}">Saldo: ${currency(client.balance)}</span>
-        <span class="badge ${debt > 0 ? "danger" : "muted"}">Divida: ${currency(debt)}</span>
-      </div>
+      <form class="client-adjust-form" data-client-id="${client.id}">
+        <input type="number" name="amount" min="0.01" step="0.01" placeholder="Valor (Kz)" required>
+        <select name="action" aria-label="Tipo de ajuste">
+          <option value="deposit">+ Saldo</option>
+          <option value="withdrawal">- Saldo</option>
+          <option value="debt">+ Divida</option>
+          <option value="settlement">- Divida</option>
+        </select>
+        <button class="primary-button" type="submit">Aplicar</button>
+      </form>
     `;
     target.appendChild(row);
   });
+}
+
+async function onAdjustClient(form) {
+  const clientId = form.dataset.clientId;
+  const client = findClient(clientId);
+  if (!client) return alert("Cliente nao encontrado.");
+
+  const amount = Number(new FormData(form).get("amount"));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return alert("Informe um valor valido.");
+  }
+  const action = String(new FormData(form).get("action"));
+
+  if (action === "deposit") {
+    client.balance = (client.balance || 0) + amount;
+  } else if (action === "withdrawal") {
+    if ((client.balance || 0) < amount) {
+      return alert(`Saldo insuficiente. Saldo atual: ${currency(client.balance || 0)}.`);
+    }
+    client.balance -= amount;
+  } else if (action === "debt") {
+    client.debt = (client.debt || 0) + amount;
+  } else if (action === "settlement") {
+    if ((client.debt || 0) < amount) {
+      return alert(`Divida insuficiente. Divida atual: ${currency(client.debt || 0)}.`);
+    }
+    client.debt -= amount;
+  }
+
+  await persistMutation({
+    success: "Ajuste guardado e sincronizado.",
+    fallback: "Ajuste guardado localmente."
+  });
+
+  renderAll();
 }
 
 function renderStock() {
