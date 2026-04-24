@@ -602,8 +602,7 @@ svg {
 }
 
 .form-grid,
-.filter-grid,
-.integration-mapping-grid {
+.filter-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
@@ -720,22 +719,6 @@ td {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.integration-details {
-  padding: 12px 14px;
-  border-radius: 18px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.58);
-}
-
-.integration-details summary {
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.integration-details[open] summary {
-  margin-bottom: 12px;
 }
 
 .actions-row {
@@ -916,7 +899,6 @@ body.menu-open .mobile-overlay {
 
   .form-grid,
   .filter-grid,
-  .integration-mapping-grid,
   .price-preview {
     grid-template-columns: 1fr;
   }

@@ -277,16 +277,6 @@ function renderAll() {
 function renderSupabaseConfig() {
   setInputValue("supabaseUrl", supabaseConfig.url || "");
   setInputValue("supabaseAnonKey", supabaseConfig.anonKey || "");
-  setInputValue("tableStores", supabaseConfig.tables.stores || defaultTables.stores);
-  setInputValue("tableClients", supabaseConfig.tables.clients || defaultTables.clients);
-  setInputValue("tableProducts", supabaseConfig.tables.products || defaultTables.products);
-  setInputValue("tableSales", supabaseConfig.tables.sales || defaultTables.sales);
-  setInputValue("tableExpenses", supabaseConfig.tables.expenses || defaultTables.expenses);
-  setInputValue("tableInvestments", supabaseConfig.tables.investments || defaultTables.investments);
-  setInputValue("tableStock", supabaseConfig.tables.stock || defaultTables.stock);
-  setInputValue("tableMovements", supabaseConfig.tables.movements || defaultTables.movements);
-  setInputValue("tableWater", supabaseConfig.tables.water || defaultTables.water);
-  setInputValue("tableMaintenance", supabaseConfig.tables.maintenance || defaultTables.maintenance);
   renderSyncStatus();
 }
 
