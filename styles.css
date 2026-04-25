@@ -71,11 +71,18 @@ svg {
 }
 
 .brand-logo {
-  width: 74px;
-  height: 74px;
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  margin: 0 auto;
   object-fit: contain;
-  border-radius: 18px;
   filter: drop-shadow(0 12px 22px rgba(65, 210, 243, 0.3));
+}
+
+.brand.brand-visual {
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
 }
 
 .brand-support {
