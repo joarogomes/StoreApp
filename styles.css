@@ -71,23 +71,11 @@ svg {
 }
 
 .brand-logo {
-  width: 96px;
-  height: 96px;
+  width: 74px;
+  height: 74px;
   object-fit: contain;
-  border-radius: 50%;
+  border-radius: 18px;
   filter: drop-shadow(0 12px 22px rgba(65, 210, 243, 0.3));
-}
-
-.brand.brand-visual {
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  text-align: center;
-}
-
-.brand.brand-visual .sidebar-title {
-  text-align: center;
-  letter-spacing: 0.08em;
 }
 
 .brand-support {
@@ -227,7 +215,7 @@ svg {
 }
 
 .login-logo {
-  width: 240px;
+  width: 220px;
   max-width: 100%;
   height: auto;
   margin: 0 auto 4px;
