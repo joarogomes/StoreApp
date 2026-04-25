@@ -421,6 +421,17 @@ body.role-operacao .role-admin-only {
   flex-wrap: wrap;
 }
 
+.period-switch-bar {
+  align-self: flex-start;
+}
+
+.reports-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
 .period-button {
   padding: 10px 14px;
   color: var(--ink);

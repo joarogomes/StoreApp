@@ -45,7 +45,6 @@
           </label>
           <div class="status-pill" id="syncStatus">Modo local</div>
           <button type="button" class="ghost-button header-action" id="sendWhatsappReport" title="Enviar resumo diario via WhatsApp">WhatsApp</button>
-          <button type="button" class="primary-button header-action role-admin-only" id="monthlyReportButton">Resumo mensal</button>
           <div class="header-account">
             <span class="header-account-label">Sessao</span>
             <strong id="sessionRoleLabel">-</strong>
@@ -75,18 +74,11 @@
       </header>
 
       <section class="view active" id="dashboard">
-        <div class="hero-panel">
-          <div>
-            <p class="eyebrow">Resumo em tempo real</p>
-            <h3>Uma leitura clara das vendas, finanças, estoque e qualidade da água</h3>
-            <p class="hero-copy">Os gráficos usam cores por desempenho: abaixo de 17.000 Kz em vermelho, entre 17.000 e 25.000 Kz em amarelo e acima de 25.000 Kz em verde.</p>
-          </div>
-          <div class="period-switch" id="periodSwitch">
-            <button class="period-button active" data-period="daily">Diario</button>
-            <button class="period-button" data-period="weekly">Semanal</button>
-            <button class="period-button role-admin-only" data-period="monthly">Mensal</button>
-            <button class="period-button role-admin-only" data-period="yearly">Anual</button>
-          </div>
+        <div class="period-switch period-switch-bar" id="periodSwitch">
+          <button class="period-button active" data-period="daily">Diario</button>
+          <button class="period-button" data-period="weekly">Semanal</button>
+          <button class="period-button role-admin-only" data-period="monthly">Mensal</button>
+          <button class="period-button role-admin-only" data-period="yearly">Anual</button>
         </div>
 
         <div class="stats-grid" id="statsGrid"></div>
@@ -593,6 +585,9 @@
       </section>
 
       <section class="view" id="relatorios">
+        <div class="reports-toolbar">
+          <button type="button" class="primary-button" id="monthlyReportButton">Atualizar resumo mensal</button>
+        </div>
         <div class="two-column">
           <section class="panel">
             <div class="panel-header">

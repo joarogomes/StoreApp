@@ -276,9 +276,7 @@ function applyRolePermissions() {
   document.body.classList.toggle("role-operacao", currentRole === "operacao");
   const label = document.getElementById("sessionRoleLabel");
   if (label) {
-    const name = currentUser?.username ? currentUser.username : "-";
-    const roleLbl = ROLE_LABELS[currentRole] || "";
-    label.textContent = roleLbl ? `${name} (${roleLbl})` : name;
+    label.textContent = currentUser?.username || ROLE_LABELS[currentRole] || "-";
   }
 
   if (currentRole === "operacao") {
@@ -438,9 +436,7 @@ function bindNavigation() {
     });
   });
 
-  document.getElementById("monthlyReportButton")?.addEventListener("click", () => {
-    navTabs.find((tab) => tab.dataset.view === "relatorios").click();
-  });
+  document.getElementById("monthlyReportButton")?.addEventListener("click", renderReports);
 
   document.getElementById("sendWhatsappReport")?.addEventListener("click", sendWhatsappReport);
   document.getElementById("copyDailyReport")?.addEventListener("click", copyDailyReport);
