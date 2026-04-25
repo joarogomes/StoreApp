@@ -215,10 +215,12 @@ svg {
 }
 
 .login-logo {
-  width: 72px;
-  height: 72px;
-  margin: 0 auto;
+  width: 220px;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto 4px;
   object-fit: contain;
+  filter: drop-shadow(0 12px 24px rgba(13, 35, 65, 0.18));
 }
 
 .login-card h2 {
