@@ -58,9 +58,9 @@
         <button class="nav-tab" data-view="vendas">Vendas</button>
         <button class="nav-tab" data-view="clientes">Clientes</button>
         <button class="nav-tab role-admin-only" data-view="estoque">Estoque</button>
-        <button class="nav-tab role-admin-only" data-view="financas">Financas</button>
-        <button class="nav-tab" data-view="agua">Agua</button>
-        <button class="nav-tab role-admin-only" data-view="relatorios">Relatorios</button>
+        <button class="nav-tab role-admin-only" data-view="financas">Finanças</button>
+        <button class="nav-tab" data-view="agua">Água</button>
+        <button class="nav-tab role-admin-only" data-view="relatorios">Relatórios</button>
         <button class="nav-tab role-admin-only" data-view="acessos">Acessos</button>
       </nav>
     </header>
@@ -69,11 +69,8 @@
     <main class="main-content">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Loja de agua filtrada</p>
+          <p class="eyebrow">Loja de água filtrada</p>
           <h2 id="viewTitle">Dashboard operacional</h2>
-        </div>
-        <div class="topbar-actions">
-          <button type="button" class="primary-button" id="sendWhatsappReport" title="Enviar resumo diario via WhatsApp">Enviar relatorio</button>
         </div>
       </header>
 
@@ -161,6 +158,9 @@
       </section>
 
       <section class="view" id="vendas">
+        <div class="vendas-toolbar">
+          <button type="button" class="primary-button" id="sendWhatsappReport" title="Enviar resumo diario via WhatsApp">Enviar relatório</button>
+        </div>
         <div class="two-column">
           <section class="panel">
             <div class="panel-header">
@@ -348,7 +348,7 @@
                 <label>
                   Categoria
                   <select name="category">
-                    <option value="Agua">Agua</option>
+                    <option value="Agua">Água</option>
                     <option value="Acessorio">Acessorio</option>
                   </select>
                 </label>
