@@ -984,26 +984,26 @@ function syncAnchorInput() {
 }
 
 function shiftPeriodAnchor(direction) {
-  const date = new Date(periodAnchor);
+  const date = parseIsoUtc(periodAnchor);
   if (currentPeriod === "daily") {
-    date.setDate(date.getDate() + direction);
+    date.setUTCDate(date.getUTCDate() + direction);
   } else if (currentPeriod === "weekly") {
-    date.setDate(date.getDate() + direction * 7);
+    date.setUTCDate(date.getUTCDate() + direction * 7);
   } else if (currentPeriod === "monthly") {
-    addMonthsSafely(date, direction);
+    addMonthsSafelyUtc(date, direction);
   } else {
-    addMonthsSafely(date, direction * 12);
+    addMonthsSafelyUtc(date, direction * 12);
   }
-  periodAnchor = date.toISOString().slice(0, 10);
+  periodAnchor = isoFromUtc(date);
   renderDashboard();
 }
 
-function addMonthsSafely(date, months) {
-  const day = date.getDate();
-  date.setDate(1);
-  date.setMonth(date.getMonth() + months);
-  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  date.setDate(Math.min(day, lastDay));
+function addMonthsSafelyUtc(date, months) {
+  const day = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(day, lastDay));
 }
 
 function renderPeriodRangeLabel(timeline) {
@@ -1016,16 +1016,17 @@ function renderPeriodRangeLabel(timeline) {
 }
 
 function renderMetricCards(stats) {
-  const periodLabel = currentPeriod === "weekly" ? "semanal" : "diario";
+  const periodWord = ({ daily: "do dia", weekly: "da semana", monthly: "do mes", yearly: "do ano" })[currentPeriod] || "do periodo";
+  const selectedLabel = stats.selectedLabel || "";
   const metrics = currentRole === "operacao"
     ? [
-        { label: `Lucro ${periodLabel}`, value: currency(stats.profit), note: "Vendas menos despesas no periodo" }
+        { label: `Lucro ${periodWord}`, value: currency(stats.profit), note: selectedLabel }
       ]
     : [
-        { label: "Total de vendas", value: currency(stats.salesTotal), note: `${stats.salesCount} movimentos que contam como venda` },
-        { label: "Lucro", value: currency(stats.profit), note: "Vendas - despesas - investimentos" },
-        { label: "Despesas", value: currency(stats.expenses), note: "Custos operacionais do periodo" },
-        { label: "Investimentos", value: currency(stats.investments), note: "Custos de crescimento do negocio" }
+        { label: `Total de vendas ${periodWord}`, value: currency(stats.salesTotal), note: `${stats.salesCount} movimentos - ${selectedLabel}` },
+        { label: `Lucro ${periodWord}`, value: currency(stats.profit), note: `Vendas - despesas - investimentos (${selectedLabel})` },
+        { label: `Despesas ${periodWord}`, value: currency(stats.expenses), note: selectedLabel },
+        { label: `Investimentos ${periodWord}`, value: currency(stats.investments), note: selectedLabel }
       ];
 
   const grid = document.getElementById("statsGrid");
@@ -2316,16 +2317,18 @@ function buildPeriodStats(period, anchor = today) {
   const expenseEntries = state.finance.filter((item) => item.type === "expense");
   const investmentEntries = state.finance.filter((item) => item.type === "investment");
 
-  const inAnyBucket = (date) => buckets.some((b) => b.contains(date));
-  const filteredSales = salesEntries.filter((item) => inAnyBucket(item.date));
-  const filteredExpenses = expenseEntries.filter((item) => inAnyBucket(item.date));
-  const filteredInvestments = investmentEntries.filter((item) => inAnyBucket(item.date));
+  // Headline numbers reflect ONLY the selected period (single day / week / month / year).
+  const selected = selectedBucket(period, anchor);
+  const selectedSales = salesEntries.filter((item) => selected.contains(item.date));
+  const selectedExpenses = expenseEntries.filter((item) => selected.contains(item.date));
+  const selectedInvestments = investmentEntries.filter((item) => selected.contains(item.date));
 
-  const salesTotal = filteredSales.reduce((sum, item) => sum + item.total, 0);
-  const expensesTotal = filteredExpenses.reduce((sum, item) => sum + item.amount, 0);
-  const investmentsTotal = filteredInvestments.reduce((sum, item) => sum + item.amount, 0);
-  const paymentTotals = groupPayments(filteredSales);
+  const salesTotal = selectedSales.reduce((sum, item) => sum + item.total, 0);
+  const expensesTotal = selectedExpenses.reduce((sum, item) => sum + item.amount, 0);
+  const investmentsTotal = selectedInvestments.reduce((sum, item) => sum + item.amount, 0);
+  const paymentTotals = groupPayments(selectedSales);
 
+  // Timeline drives the trend chart, so it stays the rolling window of buckets.
   const timeline = buckets.map((bucket) => {
     const sales = salesEntries.filter((item) => bucket.contains(item.date)).reduce((sum, item) => sum + item.total, 0);
     const expenses = expenseEntries.filter((item) => bucket.contains(item.date)).reduce((sum, item) => sum + item.amount, 0);
@@ -2341,13 +2344,14 @@ function buildPeriodStats(period, anchor = today) {
   });
 
   return {
+    selectedLabel: selected.label,
     salesTotal,
-    salesCount: filteredSales.length,
+    salesCount: selectedSales.length,
     expenses: expensesTotal,
     investments: investmentsTotal,
     profit: salesTotal - expensesTotal - investmentsTotal,
     paymentTotals,
-    productTotals: filteredSales.reduce((acc, item) => {
+    productTotals: selectedSales.reduce((acc, item) => {
       const name = findProduct(item.productId)?.name || item.productName || "Produto";
       acc[name] = (acc[name] || 0) + item.total;
       return acc;
@@ -2356,13 +2360,72 @@ function buildPeriodStats(period, anchor = today) {
   };
 }
 
+function parseIsoUtc(iso) {
+  const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
+  return new Date(Date.UTC(y || 1970, (m || 1) - 1, d || 1));
+}
+
+function isoFromUtc(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function startOfWeekUtc(date) {
+  const d = new Date(date.getTime());
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay()); // Sunday = 0
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+function selectedBucket(period, anchor) {
+  const anchorDate = parseIsoUtc(anchor);
+  if (period === "weekly") {
+    const sunday = startOfWeekUtc(anchorDate);
+    const saturday = new Date(sunday.getTime());
+    saturday.setUTCDate(saturday.getUTCDate() + 6);
+    const startIso = isoFromUtc(sunday);
+    const endIso = isoFromUtc(saturday);
+    return {
+      label: `Semana de ${formatDateBr(startIso)} a ${formatDateBr(endIso)}`,
+      contains: (date) => {
+        const iso = String(date).slice(0, 10);
+        return iso >= startIso && iso <= endIso;
+      }
+    };
+  }
+  if (period === "monthly") {
+    const ym = `${anchorDate.getUTCFullYear()}-${String(anchorDate.getUTCMonth() + 1).padStart(2, "0")}`;
+    return {
+      label: `${PT_MONTHS[anchorDate.getUTCMonth()]} de ${anchorDate.getUTCFullYear()}`,
+      contains: (date) => String(date).slice(0, 7) === ym
+    };
+  }
+  if (period === "yearly") {
+    const ys = String(anchorDate.getUTCFullYear());
+    return {
+      label: `Ano ${ys}`,
+      contains: (date) => String(date).slice(0, 4) === ys
+    };
+  }
+  const iso = isoFromUtc(anchorDate);
+  return {
+    label: formatDateBr(iso),
+    contains: (date) => String(date).slice(0, 10) === iso
+  };
+}
+
+function formatDateBr(iso) {
+  if (!iso) return "";
+  const [y, m, d] = String(iso).slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
+}
+
 function buildBuckets(period, anchor) {
-  const anchorDate = new Date(anchor);
+  const anchorDate = parseIsoUtc(anchor);
   if (period === "daily") {
     return Array.from({ length: 7 }, (_, idx) => {
-      const d = new Date(anchorDate);
-      d.setDate(d.getDate() - (6 - idx));
-      const iso = d.toISOString().slice(0, 10);
+      const d = new Date(anchorDate.getTime());
+      d.setUTCDate(d.getUTCDate() - (6 - idx));
+      const iso = isoFromUtc(d);
       return {
         label: iso.slice(5),
         fullLabel: iso,
@@ -2372,15 +2435,15 @@ function buildBuckets(period, anchor) {
   }
   if (period === "weekly") {
     return Array.from({ length: 8 }, (_, idx) => {
-      const d = new Date(anchorDate);
-      d.setDate(d.getDate() - (7 - idx) * 7);
-      const sunday = startOfWeek(d);
-      const saturday = new Date(sunday);
-      saturday.setDate(saturday.getDate() + 6);
-      const startIso = sunday.toISOString().slice(0, 10);
-      const endIso = saturday.toISOString().slice(0, 10);
-      const wnum = weekOfMonth(sunday);
-      const monthName = SHORT_MONTH_NAMES[sunday.getMonth()];
+      const d = new Date(anchorDate.getTime());
+      d.setUTCDate(d.getUTCDate() - (7 - idx) * 7);
+      const sunday = startOfWeekUtc(d);
+      const saturday = new Date(sunday.getTime());
+      saturday.setUTCDate(saturday.getUTCDate() + 6);
+      const startIso = isoFromUtc(sunday);
+      const endIso = isoFromUtc(saturday);
+      const wnum = weekOfMonthUtc(sunday);
+      const monthName = SHORT_MONTH_NAMES[sunday.getUTCMonth()];
       return {
         label: `S${wnum}/${monthName}`,
         fullLabel: `Semana ${wnum} de ${monthName} (${startIso} a ${endIso})`,
@@ -2393,19 +2456,18 @@ function buildBuckets(period, anchor) {
   }
   if (period === "monthly") {
     return Array.from({ length: 12 }, (_, idx) => {
-      const d = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
-      d.setMonth(d.getMonth() - (11 - idx));
-      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const d = new Date(Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth() - (11 - idx), 1));
+      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
       const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
       return {
-        label: `${monthNames[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`,
+        label: `${monthNames[d.getUTCMonth()]}/${String(d.getUTCFullYear()).slice(2)}`,
         fullLabel: ym,
         contains: (date) => String(date).slice(0, 7) === ym
       };
     });
   }
   return Array.from({ length: 5 }, (_, idx) => {
-    const year = anchorDate.getFullYear() - (4 - idx);
+    const year = anchorDate.getUTCFullYear() - (4 - idx);
     const ys = String(year);
     return {
       label: ys,
@@ -2413,6 +2475,13 @@ function buildBuckets(period, anchor) {
       contains: (date) => String(date).slice(0, 4) === ys
     };
   });
+}
+
+function weekOfMonthUtc(sunday) {
+  const firstOfMonth = new Date(Date.UTC(sunday.getUTCFullYear(), sunday.getUTCMonth(), 1));
+  const firstSunday = startOfWeekUtc(firstOfMonth);
+  const diffDays = Math.round((sunday - firstSunday) / 86400000);
+  return Math.floor(diffDays / 7) + 1;
 }
 
 function startOfWeek(date) {
