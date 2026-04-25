@@ -12,7 +12,21 @@
   <script src="app.js" defer></script>
 </head>
 <body>
-  <div class="app-shell" id="appShell">
+  <div class="login-overlay" id="loginOverlay" hidden>
+    <form class="login-card" id="loginForm">
+      <img src="assets/logo.png" alt="Logo" class="login-logo" onerror="this.style.display='none'">
+      <h2>AGUA CRISTALINA</h2>
+      <p class="login-subtitle">Introduza a sua senha de acesso</p>
+      <label>
+        Senha
+        <input type="password" name="password" id="loginPassword" placeholder="******" required autocomplete="current-password">
+      </label>
+      <button type="submit" class="primary-button">Entrar</button>
+      <p class="login-error" id="loginError" hidden>Senha incorreta.</p>
+    </form>
+  </div>
+
+  <div class="app-shell" id="appShell" hidden>
     <button type="button" class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Menu" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
@@ -31,10 +45,10 @@
         <button class="nav-tab active" data-view="dashboard">Dashboard</button>
         <button class="nav-tab" data-view="vendas">Vendas</button>
         <button class="nav-tab" data-view="clientes">Clientes</button>
-        <button class="nav-tab" data-view="estoque">Estoque</button>
-        <button class="nav-tab" data-view="financas">Financas</button>
+        <button class="nav-tab role-admin-only" data-view="estoque">Estoque</button>
+        <button class="nav-tab role-admin-only" data-view="financas">Financas</button>
         <button class="nav-tab" data-view="agua">Agua</button>
-        <button class="nav-tab" data-view="relatorios">Relatorios</button>
+        <button class="nav-tab role-admin-only" data-view="relatorios">Relatorios</button>
       </nav>
 
       <section class="sidebar-card">
@@ -42,6 +56,12 @@
         <h3>WhatsApp</h3>
         <p>Envio preparado para <strong>+244939667223</strong>.</p>
         <button class="primary-button" id="sendWhatsappReport">Enviar resumo do dia</button>
+      </section>
+
+      <section class="sidebar-account">
+        <span class="card-label">Sessao</span>
+        <strong id="sessionRoleLabel">-</strong>
+        <button type="button" class="ghost-button" id="logoutButton">Terminar sessao</button>
       </section>
     </aside>
 
@@ -53,7 +73,7 @@
         </div>
         <div class="topbar-actions">
           <div class="status-pill" id="syncStatus">Modo local</div>
-          <button class="primary-button" id="monthlyReportButton">Resumo mensal</button>
+          <button class="primary-button role-admin-only" id="monthlyReportButton">Resumo mensal</button>
         </div>
       </header>
 
@@ -67,8 +87,8 @@
           <div class="period-switch" id="periodSwitch">
             <button class="period-button active" data-period="daily">Diario</button>
             <button class="period-button" data-period="weekly">Semanal</button>
-            <button class="period-button" data-period="monthly">Mensal</button>
-            <button class="period-button" data-period="yearly">Anual</button>
+            <button class="period-button role-admin-only" data-period="monthly">Mensal</button>
+            <button class="period-button role-admin-only" data-period="yearly">Anual</button>
           </div>
         </div>
 
@@ -92,7 +112,7 @@
                 <div class="series-toggles" id="seriesToggles">
                   <label class="series-toggle"><input type="checkbox" data-series="sales" checked><span class="series-dot sales"></span>Vendas</label>
                   <label class="series-toggle"><input type="checkbox" data-series="expenses" checked><span class="series-dot expenses"></span>Despesas</label>
-                  <label class="series-toggle"><input type="checkbox" data-series="profit" checked><span class="series-dot profit"></span>Lucro</label>
+                  <label class="series-toggle role-admin-only"><input type="checkbox" data-series="profit" checked><span class="series-dot profit"></span>Lucro</label>
                 </div>
               </div>
             </div>
@@ -102,7 +122,7 @@
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel role-admin-only">
             <div class="panel-header">
               <div>
                 <p class="card-label">KPI por produto</p>
@@ -115,7 +135,7 @@
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel role-admin-only">
             <div class="panel-header">
               <div>
                 <p class="card-label">Distribuicao</p>
@@ -125,7 +145,7 @@
             <div class="payment-breakdown" id="paymentBreakdown"></div>
           </section>
 
-          <section class="panel">
+          <section class="panel role-admin-only">
             <div class="panel-header">
               <div>
                 <p class="card-label">Clientes</p>
@@ -135,7 +155,7 @@
             <div id="clientBalances" class="list-stack"></div>
           </section>
 
-          <section class="panel panel-wide">
+          <section class="panel panel-wide role-admin-only">
             <div class="panel-header">
               <div>
                 <p class="card-label">Qualidade da agua</p>
@@ -178,7 +198,7 @@
                   <option>Saldo do cliente</option>
                 </select>
               </label>
-              <label>
+              <label class="role-admin-only">
                 Tipo de operacao
                 <select name="entryType" id="saleEntryType">
                   <option value="sale">Venda</option>
@@ -204,9 +224,29 @@
                 </article>
               </div>
 
-              <p class="helper-note full-width">Cliente opcional para venda normal. Para deposito, levantamento, divida, liquidacao ou pagamento por saldo do cliente, selecione um cliente. Deposito conta como venda do dia. Levantamento e divida nao contam. Liquidacao de divida conta como venda do dia.</p>
+              <p class="helper-note full-width role-admin-only">Cliente opcional para venda normal. Para deposito, levantamento, divida, liquidacao ou pagamento por saldo do cliente, selecione um cliente. Deposito conta como venda do dia. Levantamento e divida nao contam. Liquidacao de divida conta como venda do dia.</p>
               <button class="primary-button" type="submit">Guardar movimento</button>
             </form>
+
+            <div class="quick-expense role-operacao-only">
+              <div class="panel-header">
+                <div>
+                  <p class="card-label">Despesa rapida</p>
+                  <h3>Adicionar despesa do dia</h3>
+                </div>
+              </div>
+              <form id="quickExpenseForm" class="form-grid">
+                <label>
+                  Categoria
+                  <input type="text" name="category" placeholder="Energia, transporte, manutencao..." required>
+                </label>
+                <label>
+                  Valor (Kz)
+                  <input type="number" name="amount" min="0.01" step="0.01" required>
+                </label>
+                <button class="primary-button" type="submit">Registrar despesa</button>
+              </form>
+            </div>
           </section>
 
           <section class="panel">

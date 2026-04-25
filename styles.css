@@ -149,6 +149,134 @@ svg {
   color: var(--ink);
 }
 
+.sidebar-account {
+  margin-top: auto;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.sidebar-account .card-label {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.sidebar-account strong {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebar-account .ghost-button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.sidebar-account .ghost-button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: linear-gradient(135deg, #0d2341 0%, #143a63 60%, #0a8fb8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.login-overlay[hidden] {
+  display: none;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 32px 28px;
+  border-radius: 24px;
+  box-shadow: 0 32px 64px rgba(13, 35, 65, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: center;
+}
+
+.login-logo {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.login-card h2 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.login-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.login-card input {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  font-size: 1.4rem;
+  letter-spacing: 0.4em;
+  text-align: center;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.login-card .primary-button {
+  margin-top: 6px;
+}
+
+.login-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+.login-error[hidden] {
+  display: none;
+}
+
+body.role-admin .role-operacao-only,
+body.role-operacao .role-admin-only {
+  display: none !important;
+}
+
+.quick-expense {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--line);
+}
+
 .main-content {
   display: flex;
   flex-direction: column;

@@ -34,3 +34,7 @@ Configured as a static site deployment (publicDir: ".").
 - Water quality logging (pH, TDS, temperature)
 - Daily/monthly report generation with WhatsApp sharing
 - Optional Supabase sync for data persistence across devices
+- Two password-based roles:
+  - **Admin** (password `244100`): full access to all tabs and dashboards
+  - **Operacao** (password `032026`): restricted to Dashboard / Vendas / Clientes / Agua tabs, sees only daily/weekly profit, sales+expenses chart, can only register today's sales (forced) and quick expenses, plus the WhatsApp daily report
+  - Role state persisted in localStorage key `agua-cristalina-role`

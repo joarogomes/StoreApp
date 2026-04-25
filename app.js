@@ -1,5 +1,14 @@
 const STORAGE_KEY = "agua-cristalina-data-v5";
 const SUPABASE_KEY = "agua-cristalina-supabase-config-v2";
+const ROLE_KEY = "agua-cristalina-session";
+
+const ROLES = {
+  "244100": "admin",
+  "032026": "operacao"
+};
+const ROLE_LABELS = { admin: "Administrador", operacao: "Operacao" };
+
+let currentRole = null;
 const REPORT_PHONE = "244939667223";
 const STORE_NAME = "AGUA CRISTALINA";
 const today = new Date().toISOString().slice(0, 10);
@@ -84,15 +93,116 @@ const waterMetricButtons = [...document.querySelectorAll("#waterMetricSwitch .pe
 boot();
 
 async function boot() {
-  hydrateDates();
-  bindNavigation();
-  bindForms();
-  bindFilters();
-  bindSupabaseControls();
-  bindInteractiveControls();
-  renderSupabaseConfig();
-  renderAll();
-  await initializeSupabaseSession({ autoPull: true, silent: true });
+  bindLogin();
+  const savedPassword = localStorage.getItem(ROLE_KEY);
+  const savedRole = savedPassword ? ROLES[savedPassword] : null;
+  if (savedRole) {
+    await startSession(savedRole, savedPassword, { silent: true });
+  } else {
+    localStorage.removeItem(ROLE_KEY);
+    showLoginScreen();
+  }
+}
+
+function showLoginScreen() {
+  document.getElementById("loginOverlay")?.removeAttribute("hidden");
+  document.getElementById("appShell")?.setAttribute("hidden", "");
+  document.getElementById("loginPassword")?.focus();
+}
+
+function hideLoginScreen() {
+  document.getElementById("loginOverlay")?.setAttribute("hidden", "");
+  document.getElementById("appShell")?.removeAttribute("hidden");
+}
+
+function bindLogin() {
+  document.getElementById("loginForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = document.getElementById("loginPassword");
+    const errorBox = document.getElementById("loginError");
+    const password = String(input.value || "").trim();
+    const role = ROLES[password];
+    if (!role) {
+      errorBox?.removeAttribute("hidden");
+      input.value = "";
+      input.focus();
+      return;
+    }
+    errorBox?.setAttribute("hidden", "");
+    input.value = "";
+    startSession(role, password);
+  });
+}
+
+let sessionStarted = false;
+
+async function startSession(role, password, { silent = false } = {}) {
+  currentRole = role;
+  if (password) localStorage.setItem(ROLE_KEY, password);
+  applyRolePermissions();
+  hideLoginScreen();
+
+  if (!sessionStarted) {
+    sessionStarted = true;
+    hydrateDates();
+    bindNavigation();
+    bindForms();
+    bindFilters();
+    bindSupabaseControls();
+    bindInteractiveControls();
+    renderSupabaseConfig();
+    renderAll();
+    await initializeSupabaseSession({ autoPull: true, silent: true });
+  } else {
+    renderAll();
+  }
+}
+
+function logout() {
+  localStorage.removeItem(ROLE_KEY);
+  currentRole = null;
+  showLoginScreen();
+}
+
+function applyRolePermissions() {
+  document.body.classList.toggle("role-admin", currentRole === "admin");
+  document.body.classList.toggle("role-operacao", currentRole === "operacao");
+  const label = document.getElementById("sessionRoleLabel");
+  if (label) label.textContent = ROLE_LABELS[currentRole] || "-";
+
+  if (currentRole === "operacao") {
+    if (currentPeriod !== "daily" && currentPeriod !== "weekly") {
+      currentPeriod = "daily";
+      dashboardPeriodButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.period === "daily"));
+    }
+    const activeTab = document.querySelector(".nav-tab.active");
+    if (activeTab && activeTab.classList.contains("role-admin-only")) {
+      const fallback = document.querySelector(".nav-tab:not(.role-admin-only)");
+      fallback?.click();
+    }
+    const saleEntry = document.getElementById("saleEntryType");
+    if (saleEntry) saleEntry.value = "sale";
+    const saleDate = document.getElementById("saleDate");
+    if (saleDate) {
+      saleDate.value = today;
+      saleDate.min = today;
+      saleDate.max = today;
+    }
+    activeSeries.profit = false;
+    document.querySelectorAll('#seriesToggles input[data-series="profit"]').forEach((input) => {
+      input.checked = false;
+    });
+  } else {
+    const saleDate = document.getElementById("saleDate");
+    if (saleDate) {
+      saleDate.removeAttribute("min");
+      saleDate.removeAttribute("max");
+    }
+    activeSeries.profit = true;
+    document.querySelectorAll('#seriesToggles input[data-series="profit"]').forEach((input) => {
+      input.checked = true;
+    });
+  }
 }
 
 function loadState() {
@@ -209,6 +319,33 @@ function bindForms() {
   document.getElementById("financeForm")?.addEventListener("submit", onFinanceEntry);
   document.getElementById("waterForm")?.addEventListener("submit", onWaterEntry);
   document.getElementById("maintenanceForm")?.addEventListener("submit", onMaintenanceEntry);
+  document.getElementById("quickExpenseForm")?.addEventListener("submit", onQuickExpense);
+  document.getElementById("logoutButton")?.addEventListener("click", logout);
+}
+
+async function onQuickExpense(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const category = String(data.get("category") || "").trim();
+  const amount = Number(data.get("amount"));
+  if (!category || !Number.isFinite(amount) || amount <= 0) {
+    return alert("Informe categoria e valor validos.");
+  }
+  state.finance.unshift({
+    id: crypto.randomUUID(),
+    type: "expense",
+    category,
+    amount,
+    description: category,
+    date: today
+  });
+  await persistMutation({
+    success: "Despesa registrada e sincronizada.",
+    fallback: "Despesa registrada localmente."
+  });
+  form.reset();
+  renderAll();
 }
 
 function bindFilters() {
@@ -403,12 +540,17 @@ function renderPeriodRangeLabel(timeline) {
 }
 
 function renderMetricCards(stats) {
-  const metrics = [
-    { label: "Total de vendas", value: currency(stats.salesTotal), note: `${stats.salesCount} movimentos que contam como venda` },
-    { label: "Lucro", value: currency(stats.profit), note: "Vendas - despesas - investimentos" },
-    { label: "Despesas", value: currency(stats.expenses), note: "Custos operacionais do periodo" },
-    { label: "Investimentos", value: currency(stats.investments), note: "Custos de crescimento do negocio" }
-  ];
+  const periodLabel = currentPeriod === "weekly" ? "semanal" : "diario";
+  const metrics = currentRole === "operacao"
+    ? [
+        { label: `Lucro ${periodLabel}`, value: currency(stats.profit), note: "Vendas menos despesas no periodo" }
+      ]
+    : [
+        { label: "Total de vendas", value: currency(stats.salesTotal), note: `${stats.salesCount} movimentos que contam como venda` },
+        { label: "Lucro", value: currency(stats.profit), note: "Vendas - despesas - investimentos" },
+        { label: "Despesas", value: currency(stats.expenses), note: "Custos operacionais do periodo" },
+        { label: "Investimentos", value: currency(stats.investments), note: "Custos de crescimento do negocio" }
+      ];
 
   const grid = document.getElementById("statsGrid");
   const template = document.getElementById("metricTemplate");
@@ -1033,8 +1175,12 @@ async function onCreateSale(event) {
   const productId = String(form.get("productId"));
   const quantity = Number(form.get("quantity"));
   const paymentMethod = String(form.get("paymentMethod"));
-  const entryType = String(form.get("entryType"));
-  const date = String(form.get("date"));
+  let entryType = String(form.get("entryType"));
+  let date = String(form.get("date"));
+  if (currentRole === "operacao") {
+    entryType = "sale";
+    date = today;
+  }
   const product = findProduct(productId);
   const client = findClient(clientId);
 
@@ -1106,8 +1252,17 @@ async function onCreateSale(event) {
   renderAll();
 }
 
+function requireAdmin() {
+  if (currentRole !== "admin") {
+    alert("Apenas o administrador pode realizar esta acao.");
+    return false;
+  }
+  return true;
+}
+
 async function onCreateProduct(event) {
   event.preventDefault();
+  if (!requireAdmin()) return;
   const form = new FormData(event.currentTarget);
   const stockControlled = String(form.get("stockControlled")) === "true";
   const productId = crypto.randomUUID();
@@ -1167,6 +1322,7 @@ async function onCreateClient(event) {
 
 async function onUpdateStock(event) {
   event.preventDefault();
+  if (!requireAdmin()) return;
   const form = new FormData(event.currentTarget);
   const productId = String(form.get("productId"));
   const quantity = Number(form.get("quantity"));
@@ -1197,6 +1353,7 @@ async function onUpdateStock(event) {
 
 async function onFinanceEntry(event) {
   event.preventDefault();
+  if (!requireAdmin()) return;
   const form = new FormData(event.currentTarget);
   state.finance.unshift({
     id: crypto.randomUUID(),
@@ -1241,6 +1398,7 @@ async function onWaterEntry(event) {
 
 async function onMaintenanceEntry(event) {
   event.preventDefault();
+  if (!requireAdmin()) return;
   const form = new FormData(event.currentTarget);
   state.maintenance.unshift({
     id: crypto.randomUUID(),
