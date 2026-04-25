@@ -39,60 +39,67 @@ svg {
 }
 
 .app-shell {
-  display: grid;
-  grid-template-columns: 310px 1fr;
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
-.sidebar {
+.app-header {
   position: sticky;
   top: 0;
-  height: 100vh;
+  z-index: 60;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 28px 22px;
+  gap: 12px;
+  padding: 14px 24px;
   color: #eef8ff;
   background:
     linear-gradient(180deg, rgba(11, 35, 65, 0.98), rgba(16, 49, 77, 0.96)),
     radial-gradient(circle at top right, rgba(65, 210, 243, 0.22), transparent 34%);
+  box-shadow: 0 18px 40px rgba(11, 35, 65, 0.18);
 }
 
-.brand {
+.header-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
 }
 
-.brand-visual {
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 10px;
+.header-row-top {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .brand-logo {
-  width: 74px;
-  height: 74px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
-  border-radius: 18px;
-  filter: drop-shadow(0 12px 22px rgba(65, 210, 243, 0.3));
+  border-radius: 12px;
+  filter: drop-shadow(0 8px 18px rgba(65, 210, 243, 0.35));
+  flex-shrink: 0;
 }
 
 .brand-support {
   text-align: left;
+  min-width: 0;
 }
 
-.sidebar-title {
-  margin: 4px 0 0;
+.brand-name {
+  margin: 2px 0 0;
   font-family: "Space Grotesk", sans-serif;
-  font-size: 1.2rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
   color: white;
-}
-
-.brand-tagline {
-  margin: 6px 0 0;
-  color: rgba(255, 255, 255, 0.74);
-  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .eyebrow,
@@ -100,14 +107,72 @@ svg {
   margin: 0;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   opacity: 0.78;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.header-actions .header-action {
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  border-radius: 12px;
+}
+
+.header-actions .ghost-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.header-actions .ghost-button:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.header-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.header-account-label {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.65rem;
+  opacity: 0.7;
+}
+
+.header-account strong {
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+
+.header-account .ghost-button {
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  border-radius: 8px;
 }
 
 .nav-tabs {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .nav-tab,
@@ -115,25 +180,25 @@ svg {
 .primary-button,
 .ghost-button {
   border: 0;
-  border-radius: 16px;
+  border-radius: 14px;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
 .nav-tab {
-  text-align: left;
-  padding: 14px 16px;
+  text-align: center;
+  padding: 9px 16px;
   background: rgba(255, 255, 255, 0.08);
   color: inherit;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .nav-tab:hover,
 .nav-tab.active {
-  transform: translateX(4px);
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.22);
 }
 
-.sidebar-card,
 .panel,
 .hero-panel,
 .metric-card {
@@ -141,49 +206,6 @@ svg {
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.65);
   box-shadow: var(--shadow);
-}
-
-.sidebar-card {
-  border-radius: 24px;
-  padding: 18px;
-  color: var(--ink);
-}
-
-.sidebar-account {
-  margin-top: auto;
-  padding: 14px 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.sidebar-account .card-label {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.sidebar-account strong {
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.sidebar-account .ghost-button {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: white;
-  padding: 8px 12px;
-  border-radius: 12px;
-  font-size: 0.82rem;
-  cursor: pointer;
-}
-
-.sidebar-account .ghost-button:hover {
-  background: rgba(255, 255, 255, 0.16);
 }
 
 .login-overlay {
@@ -299,12 +321,6 @@ body.role-operacao .role-admin-only {
 .metric-card h3 {
   margin: 4px 0 0;
   font-family: "Space Grotesk", sans-serif;
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 
 .status-pill,
@@ -910,22 +926,18 @@ td {
 
 .mobile-menu-toggle {
   display: none;
-  position: fixed;
-  top: 14px;
-  left: 14px;
-  z-index: 1100;
-  width: 46px;
-  height: 46px;
+  width: 42px;
+  height: 42px;
   border: 0;
-  border-radius: 14px;
-  background: rgba(13, 35, 65, 0.92);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
   color: white;
   cursor: pointer;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  box-shadow: 0 12px 28px rgba(13, 35, 65, 0.32);
+  flex-shrink: 0;
 }
 
 .mobile-menu-toggle span {
@@ -966,39 +978,8 @@ body.menu-open .mobile-overlay {
 }
 
 @media (max-width: 1180px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .mobile-menu-toggle {
-    display: flex;
-  }
-
-  .mobile-overlay {
-    display: block;
-  }
-
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: min(320px, 86vw);
-    height: 100vh;
-    z-index: 1090;
-    transform: translateX(-110%);
-    transition: transform 0.28s ease;
-    overflow-y: auto;
-    padding-top: 76px;
-  }
-
-  body.menu-open .sidebar {
-    transform: translateX(0);
-    box-shadow: 24px 0 40px rgba(13, 35, 65, 0.32);
-  }
-
-  .main-content {
-    padding: 76px 22px 28px;
+  .header-account-label {
+    display: none;
   }
 
   .stats-grid,
@@ -1041,13 +1022,66 @@ body.menu-open .mobile-overlay {
   }
 }
 
+@media (max-width: 860px) {
+  .app-header {
+    padding: 12px 16px;
+  }
+
+  .mobile-menu-toggle {
+    display: flex;
+  }
+
+  .mobile-overlay {
+    display: block;
+  }
+
+  .nav-tabs {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  body.menu-open .nav-tabs {
+    display: flex;
+  }
+
+  .nav-tab {
+    text-align: left;
+    width: 100%;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .header-actions .header-action,
+  .header-actions .ghost-button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .header-account {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .main-content {
+    padding: 22px 16px 28px;
+  }
+}
+
 @media (max-width: 760px) {
   body {
     font-size: 0.94rem;
   }
 
   .main-content {
-    padding: 70px 14px 24px;
+    padding: 18px 14px 24px;
   }
 
   .panel {
@@ -1059,6 +1093,15 @@ body.menu-open .mobile-overlay {
     font-size: 1.15rem;
   }
 
+  .brand-name {
+    font-size: 0.92rem;
+  }
+
+  .brand-logo {
+    width: 40px;
+    height: 40px;
+  }
+
   .hero-panel {
     flex-direction: column;
     align-items: stretch;
@@ -1067,10 +1110,6 @@ body.menu-open .mobile-overlay {
 
   .hero-panel .period-switch {
     align-self: stretch;
-  }
-
-  .topbar-actions {
-    flex-wrap: wrap;
   }
 
   .form-grid,
@@ -1150,12 +1189,7 @@ body.menu-open .mobile-overlay {
     height: 150px;
   }
 
-  .brand-logo {
-    width: 56px;
-    height: 56px;
-  }
-
-  .sidebar-title {
-    font-size: 1.05rem;
+  .brand-name {
+    font-size: 0.85rem;
   }
 }

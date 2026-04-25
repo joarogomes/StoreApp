@@ -26,20 +26,29 @@
   </div>
 
   <div class="app-shell" id="appShell" hidden>
-    <button type="button" class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Menu" aria-expanded="false">
-      <span></span><span></span><span></span>
-    </button>
-    <div class="mobile-overlay" id="mobileOverlay"></div>
-    <aside class="sidebar" id="sidebar">
-      <div class="brand brand-visual">
-        <img src="assets/logo.png" alt="Logo AGUA CRISTALINA" class="brand-logo">
-        <div class="brand-support">
-          <p class="eyebrow">Gestao inteligente</p>
-          <h1 class="sidebar-title">AGUA CRISTALINA</h1>
-          <p class="brand-tagline">Filtrada e purificada</p>
+    <header class="app-header" id="appHeader">
+      <div class="header-row header-row-top">
+        <div class="header-brand">
+          <img src="assets/logo.png" alt="Logo AGUA CRISTALINA" class="brand-logo">
+          <div class="brand-support">
+            <p class="eyebrow">Gestao inteligente</p>
+            <h1 class="brand-name">AGUA CRISTALINA</h1>
+          </div>
+        </div>
+        <button type="button" class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Menu" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="header-actions">
+          <div class="status-pill" id="syncStatus">Modo local</div>
+          <button type="button" class="ghost-button header-action" id="sendWhatsappReport" title="Enviar resumo diario via WhatsApp">WhatsApp</button>
+          <button type="button" class="primary-button header-action role-admin-only" id="monthlyReportButton">Resumo mensal</button>
+          <div class="header-account">
+            <span class="header-account-label">Sessao</span>
+            <strong id="sessionRoleLabel">-</strong>
+            <button type="button" class="ghost-button" id="logoutButton">Sair</button>
+          </div>
         </div>
       </div>
-
       <nav class="nav-tabs" id="navTabs">
         <button class="nav-tab active" data-view="dashboard">Dashboard</button>
         <button class="nav-tab" data-view="vendas">Vendas</button>
@@ -49,30 +58,14 @@
         <button class="nav-tab" data-view="agua">Agua</button>
         <button class="nav-tab role-admin-only" data-view="relatorios">Relatorios</button>
       </nav>
-
-      <section class="sidebar-card">
-        <p class="card-label">Relatorio diario</p>
-        <h3>WhatsApp</h3>
-        <p>Envio preparado para <strong>+244939667223</strong>.</p>
-        <button class="primary-button" id="sendWhatsappReport">Enviar resumo do dia</button>
-      </section>
-
-      <section class="sidebar-account">
-        <span class="card-label">Sessao</span>
-        <strong id="sessionRoleLabel">-</strong>
-        <button type="button" class="ghost-button" id="logoutButton">Terminar sessao</button>
-      </section>
-    </aside>
+    </header>
+    <div class="mobile-overlay" id="mobileOverlay"></div>
 
     <main class="main-content">
       <header class="topbar">
         <div>
           <p class="eyebrow">Loja de agua filtrada</p>
           <h2 id="viewTitle">Dashboard operacional</h2>
-        </div>
-        <div class="topbar-actions">
-          <div class="status-pill" id="syncStatus">Modo local</div>
-          <button class="primary-button role-admin-only" id="monthlyReportButton">Resumo mensal</button>
         </div>
       </header>
 
