@@ -9,6 +9,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -69,6 +71,9 @@
         <div>
           <p class="eyebrow">Loja de agua filtrada</p>
           <h2 id="viewTitle">Dashboard operacional</h2>
+        </div>
+        <div class="topbar-actions">
+          <button type="button" class="primary-button" id="sendWhatsappReport" title="Enviar resumo diario via WhatsApp">Enviar relatorio</button>
         </div>
       </header>
 
@@ -156,9 +161,6 @@
       </section>
 
       <section class="view" id="vendas">
-        <div class="vendas-toolbar">
-          <button type="button" class="primary-button" id="sendWhatsappReport" title="Enviar resumo diario via WhatsApp">Enviar relatorio</button>
-        </div>
         <div class="two-column">
           <section class="panel">
             <div class="panel-header">
@@ -588,7 +590,8 @@
 
       <section class="view" id="relatorios">
         <div class="reports-toolbar">
-          <button type="button" class="primary-button" id="monthlyReportButton">Atualizar resumo mensal</button>
+          <button type="button" class="ghost-button" id="refreshReportsTop">Atualizar dados</button>
+          <button type="button" class="primary-button" id="monthlyReportButton">Gerar relatorio mensal (PDF)</button>
         </div>
         <div class="two-column">
           <section class="panel">

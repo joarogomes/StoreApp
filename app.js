@@ -438,7 +438,8 @@ function bindNavigation() {
     });
   });
 
-  document.getElementById("monthlyReportButton")?.addEventListener("click", renderReports);
+  document.getElementById("monthlyReportButton")?.addEventListener("click", generateMonthlyPdf);
+  document.getElementById("refreshReportsTop")?.addEventListener("click", renderReports);
 
   document.getElementById("sendWhatsappReport")?.addEventListener("click", sendWhatsappReport);
   document.getElementById("copyDailyReport")?.addEventListener("click", copyDailyReport);
@@ -667,6 +668,7 @@ function renderUsersList() {
             </div>
             <div class="entity-card-tags">
               <span class="entity-tag${user.role === "admin" ? " role-admin" : ""}">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
+              <button class="ghost-button compact" data-action="reset-password" data-id="${escapeAttr(user.id)}">Resetar senha</button>
               ${!isMe ? `<button class="danger-button" data-action="delete-user" data-id="${escapeAttr(user.id)}">Remover</button>` : ""}
             </div>
           </div>
@@ -826,9 +828,34 @@ function onUsersListAction(event) {
   if (!button) return;
   if (!requireAdmin()) return;
   const id = button.dataset.id;
-  if (button.dataset.action === "delete-user") {
-    const user = users.find((u) => u.id === id);
-    if (!user) return;
+  const action = button.dataset.action;
+  const user = users.find((u) => u.id === id);
+  if (!user) return;
+
+  if (action === "reset-password") {
+    const newPassword = prompt(`Nova senha para "${user.username}" (4 a 8 digitos numericos):`, user.password);
+    if (newPassword === null) return;
+    const trimmed = String(newPassword).trim();
+    if (!/^\d{4,8}$/.test(trimmed)) {
+      alert("A senha deve ter entre 4 e 8 digitos numericos.");
+      return;
+    }
+    if (users.some((u) => u.id !== id && u.password === trimmed)) {
+      alert("Ja existe outro usuario com essa senha.");
+      return;
+    }
+    user.password = trimmed;
+    persistUsers();
+    if (currentUser && currentUser.id === user.id) {
+      currentUser.password = trimmed;
+      localStorage.setItem(ROLE_KEY, trimmed);
+    }
+    renderAccessManagement();
+    alert("Senha actualizada com sucesso.");
+    return;
+  }
+
+  if (action === "delete-user") {
     if (currentUser && user.id === currentUser.id) {
       alert("Nao e possivel remover o proprio usuario logado.");
       return;
@@ -2457,6 +2484,474 @@ function sendWhatsappReport() {
   ].join("\n");
   const phoneRaw = (getActiveStore()?.whatsapp || DEFAULT_REPORT_PHONE).replace(/[^0-9]/g, "");
   window.open(`https://wa.me/${phoneRaw}?text=${encodeURIComponent(text)}`, "_blank");
+}
+
+const PT_MONTHS = ["Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+async function loadImageAsDataUrl(src) {
+  try {
+    const response = await fetch(src);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function buildMonthlyDataset() {
+  const now = new Date(today);
+  const month = now.getMonth();
+  const year = now.getFullYear();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const monthSales = entriesThatCountAsSales().filter((s) => {
+    const d = new Date(s.date);
+    return d.getMonth() === month && d.getFullYear() === year;
+  });
+
+  const monthExpenses = state.finance.filter((f) => f.type === "expense" && sameMonth(f.date, today));
+  const monthInvestments = state.finance.filter((f) => f.type === "investment" && sameMonth(f.date, today));
+
+  const totals = {
+    sales: monthSales.reduce((s, i) => s + (i.total || 0), 0),
+    expenses: monthExpenses.reduce((s, i) => s + (i.amount || 0), 0),
+    investments: monthInvestments.reduce((s, i) => s + (i.amount || 0), 0),
+    quantity: monthSales.reduce((s, i) => s + (i.quantity || 0), 0),
+    transactions: monthSales.length
+  };
+  totals.profit = totals.sales - totals.expenses - totals.investments;
+
+  const byProductMap = new Map();
+  monthSales.forEach((s) => {
+    const key = s.productName || s.productId || "(Sem produto)";
+    const acc = byProductMap.get(key) || { product: key, quantity: 0, total: 0 };
+    acc.quantity += Number(s.quantity || 0);
+    acc.total += Number(s.total || 0);
+    byProductMap.set(key, acc);
+  });
+  const byProduct = [...byProductMap.values()].sort((a, b) => b.total - a.total);
+
+  const paymentMethods = ["Consolidada", "TPA", "Express", "Saldo do cliente"];
+  const byPayment = paymentMethods.map((method) => {
+    const items = monthSales.filter((s) => s.paymentMethod === method);
+    return {
+      method,
+      transactions: items.length,
+      total: items.reduce((sum, i) => sum + (i.total || 0), 0)
+    };
+  });
+
+  const dailySales = Array.from({ length: daysInMonth }, (_, idx) => {
+    const day = idx + 1;
+    const total = monthSales
+      .filter((s) => new Date(s.date).getDate() === day)
+      .reduce((sum, i) => sum + (i.total || 0), 0);
+    return { day, total };
+  });
+
+  const expensesByCategory = new Map();
+  monthExpenses.forEach((e) => {
+    const key = e.category || "Sem categoria";
+    expensesByCategory.set(key, (expensesByCategory.get(key) || 0) + (e.amount || 0));
+  });
+
+  return {
+    period: { month, year, monthName: PT_MONTHS[month], daysInMonth },
+    totals,
+    byProduct,
+    byPayment,
+    dailySales,
+    expenses: monthExpenses.slice().sort((a, b) => new Date(b.date) - new Date(a.date)),
+    investments: monthInvestments.slice().sort((a, b) => new Date(b.date) - new Date(a.date)),
+    expensesByCategory: [...expensesByCategory.entries()]
+      .map(([category, total]) => ({ category, total }))
+      .sort((a, b) => b.total - a.total)
+  };
+}
+
+async function generateMonthlyPdf() {
+  if (!window.jspdf?.jsPDF) {
+    alert("Biblioteca de PDF nao carregada. Verifique a conexao a internet.");
+    return;
+  }
+  const button = document.getElementById("monthlyReportButton");
+  const originalLabel = button?.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Gerando PDF...";
+  }
+  try {
+    const data = buildMonthlyDataset();
+    const store = getActiveStore();
+    const storeName = store?.name || DEFAULT_STORE_NAME;
+    const logoDataUrl = await loadImageAsDataUrl("assets/login-logo.png");
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const marginX = 40;
+    const generatedAt = new Date().toLocaleString("pt-PT");
+    const headerCtx = { logoDataUrl, storeName, period: data.period, generatedAt, pageWidth, marginX, headerDrawnPages: new Set() };
+
+    drawPdfHeader(doc, headerCtx);
+    headerCtx.headerDrawnPages.add(doc.internal.getCurrentPageInfo().pageNumber);
+    let cursorY = 170;
+
+    cursorY = drawSummaryBlock(doc, data, { startY: cursorY, marginX, pageWidth });
+    cursorY = ensurePageSpace(doc, cursorY + 18, 120, headerCtx);
+    cursorY = drawSalesByProductTable(doc, data, { startY: cursorY, marginX, headerCtx });
+    cursorY = ensurePageSpace(doc, cursorY + 18, 120, headerCtx);
+    cursorY = drawSalesByPaymentTable(doc, data, { startY: cursorY, marginX, headerCtx });
+    cursorY = ensurePageSpace(doc, cursorY, 220, headerCtx);
+    cursorY = drawDailySalesChart(doc, data, { startY: cursorY + 18, marginX, pageWidth });
+    cursorY = ensurePageSpace(doc, cursorY, 220, headerCtx);
+    cursorY = drawTopProductsChart(doc, data, { startY: cursorY + 18, marginX, pageWidth });
+    cursorY = drawExpensesTables(doc, data, { startY: cursorY + 18, marginX, headerCtx });
+
+    addPdfFooters(doc);
+
+    const filename = `Relatorio-${slugify(storeName)}-${data.period.year}-${String(data.period.month + 1).padStart(2, "0")}.pdf`;
+    doc.save(filename);
+  } catch (error) {
+    console.error("Falha ao gerar PDF:", error);
+    alert("Nao foi possivel gerar o relatorio em PDF. " + (error?.message || ""));
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalLabel || "Gerar relatorio mensal (PDF)";
+    }
+  }
+}
+
+function drawPdfHeader(doc, { logoDataUrl, storeName, period, generatedAt, pageWidth, marginX }) {
+  doc.setFillColor(7, 56, 95);
+  doc.rect(0, 0, pageWidth, 110, "F");
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, "PNG", marginX, 18, 74, 74);
+    } catch {
+      // ignore image errors
+    }
+  }
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text(storeName, marginX + 90, 50);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(12);
+  doc.text(`Relatorio mensal - ${period.monthName} ${period.year}`, marginX + 90, 70);
+  doc.setFontSize(9);
+  doc.text(`Gerado em ${generatedAt}`, marginX + 90, 88);
+  doc.setTextColor(20, 30, 50);
+}
+
+function drawSummaryBlock(doc, data, { startY, marginX, pageWidth }) {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Sumario do mes", marginX, startY);
+  const cards = [
+    { label: "Vendas", value: currency(data.totals.sales) },
+    { label: "Lucro", value: currency(data.totals.profit) },
+    { label: "Despesas", value: currency(data.totals.expenses) },
+    { label: "Investimentos", value: currency(data.totals.investments) }
+  ];
+  const cardW = (pageWidth - marginX * 2 - 18) / 4;
+  const cardH = 60;
+  cards.forEach((card, idx) => {
+    const x = marginX + idx * (cardW + 6);
+    const y = startY + 10;
+    doc.setFillColor(241, 246, 252);
+    doc.roundedRect(x, y, cardW, cardH, 6, 6, "F");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(80, 90, 110);
+    doc.text(card.label.toUpperCase(), x + 10, y + 16);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(7, 56, 95);
+    doc.text(card.value, x + 10, y + 38);
+  });
+  doc.setTextColor(20, 30, 50);
+  const extraY = startY + 10 + cardH + 16;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(
+    `Transacoes: ${data.totals.transactions} | Quantidade total vendida: ${data.totals.quantity}`,
+    marginX,
+    extraY
+  );
+  return extraY + 6;
+}
+
+function runAutoTable(doc, headerCtx, options) {
+  const merged = {
+    ...options,
+    margin: { left: headerCtx.marginX, right: headerCtx.marginX, top: 130, ...(options.margin || {}) },
+    didDrawPage: (pageData) => {
+      const currentPage = doc.internal.getCurrentPageInfo().pageNumber;
+      if (!headerCtx.headerDrawnPages.has(currentPage)) {
+        drawPdfHeader(doc, headerCtx);
+        headerCtx.headerDrawnPages.add(currentPage);
+      }
+      if (typeof options.didDrawPage === "function") {
+        options.didDrawPage(pageData);
+      }
+    }
+  };
+  doc.autoTable(merged);
+  return doc.lastAutoTable.finalY;
+}
+
+function drawSalesByProductTable(doc, data, { startY, marginX, headerCtx }) {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(20, 30, 50);
+  doc.text("Vendas por produto", marginX, startY);
+  const totalSales = data.totals.sales || 1;
+  const body = data.byProduct.length
+    ? data.byProduct.map((p) => [
+        p.product,
+        String(p.quantity),
+        currency(p.total),
+        `${((p.total / totalSales) * 100).toFixed(1)}%`
+      ])
+    : [["Sem vendas no periodo", "-", "-", "-"]];
+  return runAutoTable(doc, headerCtx, {
+    startY: startY + 8,
+    head: [["Produto", "Quantidade", "Total", "% das vendas"]],
+    body,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [7, 56, 95], textColor: 255 },
+    alternateRowStyles: { fillColor: [241, 246, 252] }
+  });
+}
+
+function drawSalesByPaymentTable(doc, data, { startY, marginX, headerCtx }) {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Vendas por metodo de pagamento", marginX, startY);
+  const totalSales = data.totals.sales || 1;
+  const body = data.byPayment.map((row) => [
+    row.method,
+    String(row.transactions),
+    currency(row.total),
+    `${((row.total / totalSales) * 100).toFixed(1)}%`
+  ]);
+  return runAutoTable(doc, headerCtx, {
+    startY: startY + 8,
+    head: [["Metodo", "Transacoes", "Total", "% das vendas"]],
+    body,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [7, 56, 95], textColor: 255 },
+    alternateRowStyles: { fillColor: [241, 246, 252] }
+  });
+}
+
+function drawDailySalesChart(doc, data, { startY, marginX, pageWidth }) {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(20, 30, 50);
+  doc.text("Vendas por dia do mes", marginX, startY);
+  const chartTop = startY + 14;
+  const chartHeight = 160;
+  const chartWidth = pageWidth - marginX * 2;
+  doc.setDrawColor(220, 226, 235);
+  doc.setFillColor(248, 250, 253);
+  doc.roundedRect(marginX, chartTop, chartWidth, chartHeight, 6, 6, "FD");
+
+  const max = Math.max(1, ...data.dailySales.map((d) => d.total));
+  const innerLeft = marginX + 10;
+  const innerRight = marginX + chartWidth - 10;
+  const innerTop = chartTop + 10;
+  const innerBottom = chartTop + chartHeight - 22;
+  const usableHeight = innerBottom - innerTop;
+  const slot = (innerRight - innerLeft) / data.dailySales.length;
+  const barW = Math.max(2, slot * 0.6);
+
+  data.dailySales.forEach((entry, idx) => {
+    const x = innerLeft + slot * idx + (slot - barW) / 2;
+    const h = (entry.total / max) * usableHeight;
+    const y = innerBottom - h;
+    if (entry.total === 0) {
+      doc.setFillColor(220, 226, 235);
+    } else if (entry.total < 17000) {
+      doc.setFillColor(217, 79, 61);
+    } else if (entry.total <= 25000) {
+      doc.setFillColor(216, 164, 34);
+    } else {
+      doc.setFillColor(44, 140, 91);
+    }
+    doc.rect(x, y, barW, Math.max(1, h), "F");
+    if ((idx + 1) % 5 === 0 || idx === 0 || idx === data.dailySales.length - 1) {
+      doc.setFontSize(7);
+      doc.setTextColor(80, 90, 110);
+      doc.text(String(entry.day), x + barW / 2, innerBottom + 12, { align: "center" });
+    }
+  });
+
+  doc.setFontSize(8);
+  doc.setTextColor(80, 90, 110);
+  doc.text(`Maximo: ${currency(max)}`, marginX + 6, innerTop + 8);
+  doc.setTextColor(20, 30, 50);
+  return chartTop + chartHeight;
+}
+
+function drawTopProductsChart(doc, data, { startY, marginX, pageWidth }) {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Top produtos do mes", marginX, startY);
+  const chartTop = startY + 14;
+  const top = data.byProduct.slice(0, 6);
+  if (!top.length) {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(10);
+    doc.text("Sem vendas registradas no periodo.", marginX, chartTop + 14);
+    return chartTop + 18;
+  }
+  const max = Math.max(1, ...top.map((p) => p.total));
+  const rowHeight = 22;
+  const labelWidth = 140;
+  const barAreaLeft = marginX + labelWidth + 10;
+  const barAreaWidth = pageWidth - marginX - barAreaLeft - 70;
+  top.forEach((p, idx) => {
+    const y = chartTop + idx * rowHeight;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(20, 30, 50);
+    doc.text(truncateText(p.product, 28), marginX, y + 14);
+    const w = (p.total / max) * barAreaWidth;
+    doc.setFillColor(13, 132, 200);
+    doc.roundedRect(barAreaLeft, y + 4, Math.max(2, w), 14, 3, 3, "F");
+    doc.setFontSize(8);
+    doc.setTextColor(80, 90, 110);
+    doc.text(currency(p.total), barAreaLeft + barAreaWidth + 6, y + 14);
+  });
+  return chartTop + top.length * rowHeight;
+}
+
+function drawExpensesTables(doc, data, { startY, marginX, headerCtx }) {
+  let cursorY = ensurePageSpace(doc, startY, 120, headerCtx);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(20, 30, 50);
+  doc.text("Despesas do mes", marginX, cursorY);
+  const expensesBody = data.expenses.length
+    ? data.expenses.map((e) => [
+        formatDateShort(e.date),
+        e.category || "-",
+        e.description || "-",
+        currency(e.amount)
+      ])
+    : [["-", "Sem despesas registradas", "-", "-"]];
+  cursorY = runAutoTable(doc, headerCtx, {
+    startY: cursorY + 8,
+    head: [["Data", "Categoria", "Descricao", "Valor"]],
+    body: expensesBody,
+    foot: data.expenses.length
+      ? [["", "", "Total", currency(data.totals.expenses)]]
+      : undefined,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [148, 60, 60], textColor: 255 },
+    footStyles: { fillColor: [241, 246, 252], fontStyle: "bold", textColor: [20, 30, 50] },
+    alternateRowStyles: { fillColor: [253, 246, 244] }
+  }) + 18;
+
+  if (data.expensesByCategory.length) {
+    cursorY = ensurePageSpace(doc, cursorY, 120, headerCtx);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text("Despesas por categoria", marginX, cursorY);
+    cursorY = runAutoTable(doc, headerCtx, {
+      startY: cursorY + 8,
+      head: [["Categoria", "Total", "% das despesas"]],
+      body: data.expensesByCategory.map((row) => [
+        row.category,
+        currency(row.total),
+        `${((row.total / (data.totals.expenses || 1)) * 100).toFixed(1)}%`
+      ]),
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [148, 60, 60], textColor: 255 },
+      alternateRowStyles: { fillColor: [253, 246, 244] }
+    }) + 18;
+  }
+
+  cursorY = ensurePageSpace(doc, cursorY, 120, headerCtx);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Investimentos do mes", marginX, cursorY);
+  const investmentsBody = data.investments.length
+    ? data.investments.map((e) => [
+        formatDateShort(e.date),
+        e.category || "-",
+        e.description || "-",
+        currency(e.amount)
+      ])
+    : [["-", "Sem investimentos registrados", "-", "-"]];
+  return runAutoTable(doc, headerCtx, {
+    startY: cursorY + 8,
+    head: [["Data", "Categoria", "Descricao", "Valor"]],
+    body: investmentsBody,
+    foot: data.investments.length
+      ? [["", "", "Total", currency(data.totals.investments)]]
+      : undefined,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [44, 92, 140], textColor: 255 },
+    footStyles: { fillColor: [241, 246, 252], fontStyle: "bold", textColor: [20, 30, 50] },
+    alternateRowStyles: { fillColor: [241, 248, 253] }
+  });
+}
+
+function ensurePageSpace(doc, currentY, neededHeight, headerCtx) {
+  const pageHeight = doc.internal.pageSize.getHeight();
+  if (currentY + neededHeight > pageHeight - 50) {
+    doc.addPage();
+    drawPdfHeader(doc, headerCtx);
+    headerCtx?.headerDrawnPages?.add(doc.internal.getCurrentPageInfo().pageNumber);
+    return 170;
+  }
+  return currentY;
+}
+
+function addPdfFooters(doc) {
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i += 1) {
+    doc.setPage(i);
+    const w = doc.internal.pageSize.getWidth();
+    const h = doc.internal.pageSize.getHeight();
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(110, 120, 140);
+    doc.text(`Pagina ${i} de ${pages}`, w / 2, h - 20, { align: "center" });
+    doc.text("AGUA CRISTALINA - Relatorio gerado automaticamente", 40, h - 20);
+  }
+  doc.setTextColor(20, 30, 50);
+}
+
+function truncateText(value, max) {
+  const str = String(value || "");
+  return str.length > max ? `${str.slice(0, max - 1)}...` : str;
+}
+
+function formatDateShort(value) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+function slugify(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .toLowerCase() || "loja";
 }
 
 async function copyDailyReport() {

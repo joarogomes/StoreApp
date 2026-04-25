@@ -32,13 +32,13 @@ Configured as a static site deployment (publicDir: ".").
 - Inventory management
 - Financial control (expenses, investments, profit)
 - Water quality logging (pH, TDS, temperature)
-- Daily/monthly report generation with WhatsApp sharing
+- Daily report sharing via WhatsApp; **monthly report exported as a professional branded PDF** (logo, summary cards, sales-by-product, sales-by-payment, daily-sales bar chart, top-products bar chart, expenses + investments tables) using jsPDF + jspdf-autotable (CDN).
 - Optional Supabase sync for data persistence across devices
 - Multi-store + user accounts:
   - Admin can create unlimited lojas in the **Acessos** tab; each loja has its own isolated data (sales, clients, stock, finance, water, maintenance, products) under localStorage keys `agua-cristalina-data-v5:<storeId>` and `agua-cristalina-data-v5:products:<storeId>`.
   - Each loja has its own WhatsApp report number, used by the WhatsApp daily report button.
   - Header includes a **Loja** switcher (hidden when the user only has access to one loja). Switching saves the current loja's data and reloads the selected loja's data.
-  - Admin can create users in the **Acessos** tab, defining username, numeric password (4-8 digits), role (admin/operacao) and which lojas the user can operate. Use `*` (Todas) for full access (admin only).
+  - Admin can create users in the **Acessos** tab, defining username, numeric password (4-8 digits), role (admin/operacao) and which lojas the user can operate. Use `*` (Todas) for full access (admin only). Each user card has a **Resetar senha** button so admins can change any user's password (including their own); resetting the current user's password also updates the active session in `ROLE_KEY`.
   - Default seed accounts (created on first run): Administrador (password `244100`, all lojas) and Operacao (password `032026`, default loja). Both can be edited or removed once another admin user exists.
   - Registries: `agua-cristalina-stores-v1`, `agua-cristalina-users-v1`, `agua-cristalina-current-store`. Session password persisted in `agua-cristalina-session`.
 - Roles:
