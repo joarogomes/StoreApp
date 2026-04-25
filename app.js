@@ -1,5 +1,6 @@
 const STORAGE_KEY = "agua-cristalina-data-v5";
 const ORPHAN_DEFAULT_CLEANUP_KEY = "agua-cristalina-orphan-default-cleanup-v1";
+const SEED_OPERACAO_CLEANUP_KEY = "agua-cristalina-seed-operacao-cleanup-v1";
 const SUPABASE_KEY = "agua-cristalina-supabase-config-v2";
 const ROLE_KEY = "agua-cristalina-session";
 const STORES_KEY = "agua-cristalina-stores-v1";
@@ -102,6 +103,7 @@ async function boot() {
   loadStoresAndUsers();
   migrateLegacyDataIfNeeded();
   cleanupOrphanDefaultStore();
+  cleanupSeedOperacaoUser();
   bindLogin();
   const savedPassword = localStorage.getItem(ROLE_KEY);
   const savedUser = savedPassword ? users.find((u) => u.password === savedPassword) : null;
@@ -232,6 +234,20 @@ function cleanupOrphanDefaultStore() {
     if (changed) persistUsers();
   }
   localStorage.setItem(ORPHAN_DEFAULT_CLEANUP_KEY, "done");
+}
+
+function cleanupSeedOperacaoUser() {
+  if (localStorage.getItem(SEED_OPERACAO_CLEANUP_KEY)) return;
+  if (!Array.isArray(users) || users.length < 2) return;
+  const seedOperacao = users.find((u) => u && u.role === "operacao" && u.username === "Operacao" && u.password === "032026");
+  if (!seedOperacao) return;
+  const remainingAdmins = users.filter((u) => u !== seedOperacao && u.role === "admin" && allowedStoresFor(u).length > 0);
+  if (!remainingAdmins.length) return;
+  const sessionPassword = localStorage.getItem(ROLE_KEY);
+  if (sessionPassword === seedOperacao.password) localStorage.removeItem(ROLE_KEY);
+  users = users.filter((u) => u !== seedOperacao);
+  persistUsers();
+  localStorage.setItem(SEED_OPERACAO_CLEANUP_KEY, "done");
 }
 
 function persistStores() {
