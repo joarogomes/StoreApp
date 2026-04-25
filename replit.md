@@ -34,7 +34,13 @@ Configured as a static site deployment (publicDir: ".").
 - Water quality logging (pH, TDS, temperature)
 - Daily/monthly report generation with WhatsApp sharing
 - Optional Supabase sync for data persistence across devices
-- Two password-based roles:
-  - **Admin** (password `244100`): full access to all tabs and dashboards
-  - **Operacao** (password `032026`): restricted to Dashboard / Vendas / Clientes / Agua tabs, sees only daily/weekly profit, sales+expenses chart, can only register today's sales (forced) and quick expenses, plus the WhatsApp daily report
-  - Role state persisted in localStorage key `agua-cristalina-role`
+- Multi-store + user accounts:
+  - Admin can create unlimited lojas in the **Acessos** tab; each loja has its own isolated data (sales, clients, stock, finance, water, maintenance, products) under localStorage keys `agua-cristalina-data-v5:<storeId>` and `agua-cristalina-data-v5:products:<storeId>`.
+  - Each loja has its own WhatsApp report number, used by the WhatsApp daily report button.
+  - Header includes a **Loja** switcher (hidden when the user only has access to one loja). Switching saves the current loja's data and reloads the selected loja's data.
+  - Admin can create users in the **Acessos** tab, defining username, numeric password (4-8 digits), role (admin/operacao) and which lojas the user can operate. Use `*` (Todas) for full access (admin only).
+  - Default seed accounts (created on first run): Administrador (password `244100`, all lojas) and Operacao (password `032026`, default loja). Both can be edited or removed once another admin user exists.
+  - Registries: `agua-cristalina-stores-v1`, `agua-cristalina-users-v1`, `agua-cristalina-current-store`. Session password persisted in `agua-cristalina-session`.
+- Roles:
+  - **Admin**: full access to all tabs (including Estoque, Financas, Relatorios, Acessos) and dashboards.
+  - **Operacao**: restricted to Dashboard / Vendas / Clientes / Agua tabs, sees only daily/weekly profit, sales+expenses chart, can only register today's sales (forced) and quick expenses, plus the WhatsApp daily report.

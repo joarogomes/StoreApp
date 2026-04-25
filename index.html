@@ -39,6 +39,10 @@
           <span></span><span></span><span></span>
         </button>
         <div class="header-actions">
+          <label class="store-switcher" title="Loja activa">
+            <span class="store-switcher-label">Loja</span>
+            <select id="storeSwitcher"></select>
+          </label>
           <div class="status-pill" id="syncStatus">Modo local</div>
           <button type="button" class="ghost-button header-action" id="sendWhatsappReport" title="Enviar resumo diario via WhatsApp">WhatsApp</button>
           <button type="button" class="primary-button header-action role-admin-only" id="monthlyReportButton">Resumo mensal</button>
@@ -57,6 +61,7 @@
         <button class="nav-tab role-admin-only" data-view="financas">Financas</button>
         <button class="nav-tab" data-view="agua">Agua</button>
         <button class="nav-tab role-admin-only" data-view="relatorios">Relatorios</button>
+        <button class="nav-tab role-admin-only" data-view="acessos">Acessos</button>
       </nav>
     </header>
     <div class="mobile-overlay" id="mobileOverlay"></div>
@@ -649,6 +654,66 @@
             </div>
           </div>
         </section>
+      </section>
+
+      <section class="view" id="acessos">
+        <div class="two-column">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Lojas</p>
+                <h3>Gestao de lojas</h3>
+                <p class="helper-note">Cria, renomeia e remove lojas. Cada loja tem dados independentes.</p>
+              </div>
+            </div>
+            <form id="storeForm" class="form-grid">
+              <label class="full-width">
+                Nome da loja
+                <input type="text" name="name" required placeholder="Ex.: Bela Vista" autocomplete="off">
+              </label>
+              <label class="full-width">
+                WhatsApp para relatorios (formato +244...)
+                <input type="text" name="whatsapp" placeholder="+244939667223" autocomplete="off">
+              </label>
+              <button class="primary-button full-width" type="submit">Adicionar loja</button>
+            </form>
+            <div id="storesList" class="entity-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Usuarios</p>
+                <h3>Acessos por usuario</h3>
+                <p class="helper-note">Define a senha, a funcao e quais lojas cada usuario pode operar.</p>
+              </div>
+            </div>
+            <form id="userForm" class="form-grid">
+              <label class="full-width">
+                Nome do usuario
+                <input type="text" name="username" required placeholder="Ex.: Joao" autocomplete="off">
+              </label>
+              <label>
+                Funcao
+                <select name="role" id="userFormRole">
+                  <option value="operacao">Operacao</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </label>
+              <label>
+                Senha (numerica)
+                <input type="text" name="password" required pattern="[0-9]{4,8}" placeholder="Ex.: 1234" autocomplete="off">
+              </label>
+              <fieldset class="full-width store-access-field" id="userFormStores">
+                <legend>Lojas com acesso</legend>
+                <p class="helper-note">Selecione uma ou mais lojas. Administradores podem ter acesso a todas.</p>
+                <div class="store-access-options" id="userFormStoresOptions"></div>
+              </fieldset>
+              <button class="primary-button full-width" type="submit">Adicionar usuario</button>
+            </form>
+            <div id="usersList" class="entity-list"></div>
+          </section>
+        </div>
       </section>
     </main>
   </div>

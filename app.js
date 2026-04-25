@@ -1,17 +1,21 @@
 const STORAGE_KEY = "agua-cristalina-data-v5";
 const SUPABASE_KEY = "agua-cristalina-supabase-config-v2";
 const ROLE_KEY = "agua-cristalina-session";
+const STORES_KEY = "agua-cristalina-stores-v1";
+const USERS_KEY = "agua-cristalina-users-v1";
+const CURRENT_STORE_KEY = "agua-cristalina-current-store";
 
-const ROLES = {
-  "244100": "admin",
-  "032026": "operacao"
-};
+const DEFAULT_STORE_ID = "default";
+const DEFAULT_STORE_NAME = "AGUA CRISTALINA";
+const DEFAULT_REPORT_PHONE = "+244939667223";
 const ROLE_LABELS = { admin: "Administrador", operacao: "Operacao" };
 
 let currentRole = null;
+let currentUser = null;
 let sessionStarted = false;
-const REPORT_PHONE = "244939667223";
-const STORE_NAME = "AGUA CRISTALINA";
+let stores = [];
+let users = [];
+let activeStoreId = null;
 const today = new Date().toISOString().slice(0, 10);
 
 const defaultTables = {
@@ -94,15 +98,99 @@ const waterMetricButtons = [...document.querySelectorAll("#waterMetricSwitch .pe
 boot();
 
 async function boot() {
+  loadStoresAndUsers();
+  migrateLegacyDataIfNeeded();
   bindLogin();
   const savedPassword = localStorage.getItem(ROLE_KEY);
-  const savedRole = savedPassword ? ROLES[savedPassword] : null;
-  if (savedRole) {
-    await startSession(savedRole, savedPassword, { silent: true });
+  const savedUser = savedPassword ? users.find((u) => u.password === savedPassword) : null;
+  if (savedUser && allowedStoresFor(savedUser).length > 0) {
+    await startSession(savedUser, { silent: true });
   } else {
     localStorage.removeItem(ROLE_KEY);
     showLoginScreen();
   }
+}
+
+function loadStoresAndUsers() {
+  try {
+    const rawStores = localStorage.getItem(STORES_KEY);
+    stores = rawStores ? JSON.parse(rawStores) : [];
+  } catch {
+    stores = [];
+  }
+  try {
+    const rawUsers = localStorage.getItem(USERS_KEY);
+    users = rawUsers ? JSON.parse(rawUsers) : [];
+  } catch {
+    users = [];
+  }
+  if (!Array.isArray(stores) || stores.length === 0) {
+    stores = [{ id: DEFAULT_STORE_ID, name: DEFAULT_STORE_NAME, whatsapp: DEFAULT_REPORT_PHONE }];
+    persistStores();
+  }
+  if (!Array.isArray(users) || users.length === 0) {
+    users = [
+      { id: crypto.randomUUID(), username: "Administrador", password: "244100", role: "admin", allowedStoreIds: ["*"] },
+      { id: crypto.randomUUID(), username: "Operacao", password: "032026", role: "operacao", allowedStoreIds: [DEFAULT_STORE_ID] }
+    ];
+    persistUsers();
+  }
+}
+
+function migrateLegacyDataIfNeeded() {
+  const legacyState = localStorage.getItem(STORAGE_KEY);
+  const legacyProducts = localStorage.getItem(`${STORAGE_KEY}:products`);
+  const targetStateKey = stateKeyFor(DEFAULT_STORE_ID);
+  const targetProductsKey = productsKeyFor(DEFAULT_STORE_ID);
+  if (legacyState && !localStorage.getItem(targetStateKey)) {
+    localStorage.setItem(targetStateKey, legacyState);
+  }
+  if (legacyProducts && !localStorage.getItem(targetProductsKey)) {
+    localStorage.setItem(targetProductsKey, legacyProducts);
+  }
+  if (legacyState) localStorage.removeItem(STORAGE_KEY);
+  if (legacyProducts) localStorage.removeItem(`${STORAGE_KEY}:products`);
+}
+
+function persistStores() {
+  localStorage.setItem(STORES_KEY, JSON.stringify(stores));
+}
+
+function persistUsers() {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+function stateKeyFor(storeId) {
+  return `${STORAGE_KEY}:${storeId}`;
+}
+
+function productsKeyFor(storeId) {
+  return `${STORAGE_KEY}:products:${storeId}`;
+}
+
+function getActiveStore() {
+  return stores.find((s) => s.id === activeStoreId) || stores[0] || null;
+}
+
+function userHasAccessToStore(user, storeId) {
+  if (!user || !storeId) return false;
+  const allowed = user.allowedStoreIds || [];
+  return allowed.includes("*") || allowed.includes(storeId);
+}
+
+function allowedStoresFor(user) {
+  if (!user) return [];
+  if ((user.allowedStoreIds || []).includes("*")) return stores.slice();
+  return stores.filter((s) => user.allowedStoreIds.includes(s.id));
+}
+
+function pickInitialStore(user) {
+  const remembered = localStorage.getItem(CURRENT_STORE_KEY);
+  if (remembered && userHasAccessToStore(user, remembered) && stores.some((s) => s.id === remembered)) {
+    return remembered;
+  }
+  const allowed = allowedStoresFor(user);
+  return allowed.length ? allowed[0].id : stores[0]?.id || null;
 }
 
 function showLoginScreen() {
@@ -122,22 +210,35 @@ function bindLogin() {
     const input = document.getElementById("loginPassword");
     const errorBox = document.getElementById("loginError");
     const password = String(input.value || "").trim();
-    const role = ROLES[password];
-    if (!role) {
+    const user = users.find((u) => u.password === password);
+    if (!user) {
       errorBox?.removeAttribute("hidden");
       input.value = "";
       input.focus();
       return;
     }
+    if (!allowedStoresFor(user).length) {
+      errorBox && (errorBox.textContent = "Usuario sem lojas atribuidas. Contacte o administrador.");
+      errorBox?.removeAttribute("hidden");
+      input.value = "";
+      return;
+    }
     errorBox?.setAttribute("hidden", "");
     input.value = "";
-    startSession(role, password);
+    startSession(user);
   });
 }
 
-async function startSession(role, password, { silent = false } = {}) {
-  currentRole = role;
-  if (password) localStorage.setItem(ROLE_KEY, password);
+async function startSession(user, { silent = false } = {}) {
+  currentUser = user;
+  currentRole = user.role;
+  localStorage.setItem(ROLE_KEY, user.password);
+  activeStoreId = pickInitialStore(user);
+  if (activeStoreId) localStorage.setItem(CURRENT_STORE_KEY, activeStoreId);
+
+  state = loadState();
+  productCatalog = loadProductCatalog();
+
   applyRolePermissions();
   hideLoginScreen();
 
@@ -149,16 +250,23 @@ async function startSession(role, password, { silent = false } = {}) {
     bindFilters();
     bindSupabaseControls();
     bindInteractiveControls();
+    bindStoreSwitcher();
+    bindAccessManagement();
     renderSupabaseConfig();
+    renderStoreSwitcher();
+    renderAccessManagement();
     renderAll();
     await initializeSupabaseSession({ autoPull: true, silent: true });
   } else {
+    renderStoreSwitcher();
+    renderAccessManagement();
     renderAll();
   }
 }
 
 function logout() {
   localStorage.removeItem(ROLE_KEY);
+  currentUser = null;
   currentRole = null;
   showLoginScreen();
 }
@@ -167,7 +275,11 @@ function applyRolePermissions() {
   document.body.classList.toggle("role-admin", currentRole === "admin");
   document.body.classList.toggle("role-operacao", currentRole === "operacao");
   const label = document.getElementById("sessionRoleLabel");
-  if (label) label.textContent = ROLE_LABELS[currentRole] || "-";
+  if (label) {
+    const name = currentUser?.username ? currentUser.username : "-";
+    const roleLbl = ROLE_LABELS[currentRole] || "";
+    label.textContent = roleLbl ? `${name} (${roleLbl})` : name;
+  }
 
   if (currentRole === "operacao") {
     if (currentPeriod !== "daily" && currentPeriod !== "weekly") {
@@ -205,18 +317,49 @@ function applyRolePermissions() {
 }
 
 function loadState() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  return saved ? JSON.parse(saved) : structuredClone(demoData);
+  const storeId = activeStoreId || DEFAULT_STORE_ID;
+  const saved = localStorage.getItem(stateKeyFor(storeId));
+  if (saved) {
+    try {
+      return normalizeState(JSON.parse(saved));
+    } catch {
+      return emptyState();
+    }
+  }
+  return storeId === DEFAULT_STORE_ID ? structuredClone(demoData) : emptyState();
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  localStorage.setItem(`${STORAGE_KEY}:products`, JSON.stringify(productCatalog));
+  const storeId = activeStoreId || DEFAULT_STORE_ID;
+  localStorage.setItem(stateKeyFor(storeId), JSON.stringify(state));
+  localStorage.setItem(productsKeyFor(storeId), JSON.stringify(productCatalog));
 }
 
 function loadProductCatalog() {
-  const saved = localStorage.getItem(`${STORAGE_KEY}:products`);
-  return saved ? JSON.parse(saved) : structuredClone(baseProducts);
+  const storeId = activeStoreId || DEFAULT_STORE_ID;
+  const saved = localStorage.getItem(productsKeyFor(storeId));
+  if (saved) return JSON.parse(saved);
+  return storeId === DEFAULT_STORE_ID ? structuredClone(baseProducts) : structuredClone(baseProducts);
+}
+
+function emptyState() {
+  return {
+    clients: [],
+    stock: [],
+    sales: [],
+    finance: [],
+    waterReadings: [],
+    maintenance: []
+  };
+}
+
+function normalizeState(raw) {
+  const base = emptyState();
+  const merged = { ...base, ...(raw || {}) };
+  for (const key of Object.keys(base)) {
+    if (!Array.isArray(merged[key])) merged[key] = [];
+  }
+  return merged;
 }
 
 function loadSupabaseConfig() {
@@ -401,6 +544,272 @@ function bindInteractiveControls() {
       renderWater();
     });
   });
+}
+
+function bindStoreSwitcher() {
+  const select = document.getElementById("storeSwitcher");
+  if (!select) return;
+  select.addEventListener("change", async (event) => {
+    const newId = event.target.value;
+    if (!newId || newId === activeStoreId) return;
+    if (!userHasAccessToStore(currentUser, newId)) {
+      alert("Voce nao tem acesso a esta loja.");
+      renderStoreSwitcher();
+      return;
+    }
+    saveState();
+    activeStoreId = newId;
+    localStorage.setItem(CURRENT_STORE_KEY, newId);
+    state = loadState();
+    productCatalog = loadProductCatalog();
+    currentStore = null;
+    renderStoreSwitcher();
+    renderAccessManagement();
+    renderAll();
+    if (supabaseClient) {
+      try {
+        await ensureStore();
+        await syncFromSupabase(true);
+      } catch (error) {
+        console.warn("Falha ao trocar loja no Supabase:", error);
+      }
+    }
+  });
+}
+
+function renderStoreSwitcher() {
+  const select = document.getElementById("storeSwitcher");
+  const wrapper = select?.closest(".store-switcher");
+  if (!select || !wrapper) return;
+  const allowed = allowedStoresFor(currentUser);
+  if (allowed.length <= 1) {
+    wrapper.style.display = "none";
+  } else {
+    wrapper.style.display = "";
+  }
+  select.innerHTML = allowed
+    .map((s) => `<option value="${escapeAttr(s.id)}"${s.id === activeStoreId ? " selected" : ""}>${escapeHtml(s.name)}</option>`)
+    .join("");
+}
+
+function bindAccessManagement() {
+  document.getElementById("storeForm")?.addEventListener("submit", onCreateStore);
+  document.getElementById("userForm")?.addEventListener("submit", onCreateUser);
+  document.getElementById("storesList")?.addEventListener("click", onStoresListAction);
+  document.getElementById("usersList")?.addEventListener("click", onUsersListAction);
+  document.getElementById("userFormRole")?.addEventListener("change", renderUserFormStores);
+}
+
+function renderAccessManagement() {
+  renderStoresList();
+  renderUsersList();
+  renderUserFormStores();
+}
+
+function renderStoresList() {
+  const container = document.getElementById("storesList");
+  if (!container) return;
+  if (!stores.length) {
+    container.innerHTML = '<p class="helper-note">Nenhuma loja cadastrada ainda.</p>';
+    return;
+  }
+  container.innerHTML = stores
+    .map((store) => {
+      const isActive = store.id === activeStoreId;
+      const canDelete = stores.length > 1;
+      return `
+        <article class="entity-card" data-store-id="${escapeAttr(store.id)}">
+          <div class="entity-card-header">
+            <div>
+              <h4 class="entity-card-title">${escapeHtml(store.name)}${isActive ? " · activa" : ""}</h4>
+              <p class="entity-card-meta">WhatsApp: ${escapeHtml(store.whatsapp || "-")}</p>
+            </div>
+            <div class="entity-card-tags">
+              ${canDelete ? `<button class="danger-button" data-action="delete-store" data-id="${escapeAttr(store.id)}">Remover</button>` : ""}
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderUsersList() {
+  const container = document.getElementById("usersList");
+  if (!container) return;
+  if (!users.length) {
+    container.innerHTML = '<p class="helper-note">Nenhum usuario cadastrado ainda.</p>';
+    return;
+  }
+  container.innerHTML = users
+    .map((user) => {
+      const allowed = (user.allowedStoreIds || []).includes("*")
+        ? "Todas as lojas"
+        : (user.allowedStoreIds || [])
+            .map((id) => stores.find((s) => s.id === id)?.name || "Loja removida")
+            .join(", ") || "Nenhuma";
+      const isMe = currentUser && user.id === currentUser.id;
+      return `
+        <article class="entity-card" data-user-id="${escapeAttr(user.id)}">
+          <div class="entity-card-header">
+            <div>
+              <h4 class="entity-card-title">${escapeHtml(user.username)}${isMe ? " · voce" : ""}</h4>
+              <p class="entity-card-meta">Senha: ${escapeHtml(user.password)} · Lojas: ${escapeHtml(allowed)}</p>
+            </div>
+            <div class="entity-card-tags">
+              <span class="entity-tag${user.role === "admin" ? " role-admin" : ""}">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
+              ${!isMe ? `<button class="danger-button" data-action="delete-user" data-id="${escapeAttr(user.id)}">Remover</button>` : ""}
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderUserFormStores() {
+  const container = document.getElementById("userFormStoresOptions");
+  const roleSelect = document.getElementById("userFormRole");
+  if (!container) return;
+  const isAdmin = roleSelect?.value === "admin";
+  const wildcardOption = isAdmin
+    ? `<label><input type="checkbox" value="*" name="storeAccess"> Todas (acesso completo)</label>`
+    : "";
+  container.innerHTML =
+    wildcardOption +
+    stores
+      .map(
+        (s) =>
+          `<label><input type="checkbox" value="${escapeAttr(s.id)}" name="storeAccess"> ${escapeHtml(s.name)}</label>`
+      )
+      .join("");
+}
+
+function onCreateStore(event) {
+  event.preventDefault();
+  if (!requireAdmin()) return;
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const name = String(data.get("name") || "").trim();
+  let whatsapp = String(data.get("whatsapp") || "").trim();
+  if (!name) return;
+  if (whatsapp && !whatsapp.startsWith("+")) whatsapp = `+${whatsapp.replace(/[^0-9]/g, "")}`;
+  if (!whatsapp) whatsapp = DEFAULT_REPORT_PHONE;
+  if (stores.some((s) => normalizeText(s.name) === normalizeText(name))) {
+    alert("Ja existe uma loja com esse nome.");
+    return;
+  }
+  const id = `loja-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  stores.push({ id, name, whatsapp });
+  persistStores();
+  form.reset();
+  renderAccessManagement();
+  renderStoreSwitcher();
+}
+
+function onStoresListAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  if (!requireAdmin()) return;
+  const id = button.dataset.id;
+  if (button.dataset.action === "delete-store") {
+    if (stores.length <= 1) {
+      alert("Nao e possivel remover a unica loja.");
+      return;
+    }
+    const store = stores.find((s) => s.id === id);
+    if (!store) return;
+    if (!confirm(`Remover a loja "${store.name}"? Os dados desta loja continuarao guardados, mas ela ficara inacessivel.`)) return;
+    stores = stores.filter((s) => s.id !== id);
+    persistStores();
+    users = users.map((u) => ({
+      ...u,
+      allowedStoreIds: (u.allowedStoreIds || []).filter((sid) => sid === "*" || sid !== id)
+    }));
+    persistUsers();
+    if (activeStoreId === id) {
+      activeStoreId = pickInitialStore(currentUser);
+      if (activeStoreId) localStorage.setItem(CURRENT_STORE_KEY, activeStoreId);
+      state = loadState();
+      productCatalog = loadProductCatalog();
+      renderAll();
+    }
+    renderAccessManagement();
+    renderStoreSwitcher();
+  }
+}
+
+function onCreateUser(event) {
+  event.preventDefault();
+  if (!requireAdmin()) return;
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const username = String(data.get("username") || "").trim();
+  const password = String(data.get("password") || "").trim();
+  const rawRole = String(data.get("role") || "operacao");
+  const role = rawRole === "admin" ? "admin" : "operacao";
+  let allowedStoreIds = data.getAll("storeAccess").map(String);
+  const validStoreIds = new Set(stores.map((s) => s.id));
+  if (role === "admin" && allowedStoreIds.includes("*")) {
+    allowedStoreIds = ["*"];
+  } else {
+    allowedStoreIds = allowedStoreIds.filter((id) => id !== "*" && validStoreIds.has(id));
+  }
+  if (!username || !password) return;
+  if (!/^\d{4,8}$/.test(password)) {
+    alert("A senha deve ter entre 4 e 8 digitos numericos.");
+    return;
+  }
+  if (users.some((u) => u.password === password)) {
+    alert("Ja existe um usuario com essa senha.");
+    return;
+  }
+  if (!allowedStoreIds.length) {
+    alert("Selecione pelo menos uma loja para o usuario.");
+    return;
+  }
+  users.push({
+    id: crypto.randomUUID(),
+    username,
+    password,
+    role,
+    allowedStoreIds
+  });
+  persistUsers();
+  form.reset();
+  renderAccessManagement();
+}
+
+function onUsersListAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  if (!requireAdmin()) return;
+  const id = button.dataset.id;
+  if (button.dataset.action === "delete-user") {
+    const user = users.find((u) => u.id === id);
+    if (!user) return;
+    if (currentUser && user.id === currentUser.id) {
+      alert("Nao e possivel remover o proprio usuario logado.");
+      return;
+    }
+    if (!confirm(`Remover o usuario "${user.username}"?`)) return;
+    users = users.filter((u) => u.id !== id);
+    persistUsers();
+    renderAccessManagement();
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
 }
 
 function renderAll() {
@@ -1473,20 +1882,18 @@ async function ensureStore() {
   const { data, error } = await supabaseClient.from(supabaseConfig.tables.stores).select("*").order("created_at", { ascending: true });
   if (error) throw error;
 
-  const existing = (data || []).find((item) => normalizeText(item.name) === normalizeText(STORE_NAME));
+  const activeStore = getActiveStore();
+  const storeName = activeStore?.name || DEFAULT_STORE_NAME;
+  const storePhone = activeStore?.whatsapp || DEFAULT_REPORT_PHONE;
+  const existing = (data || []).find((item) => normalizeText(item.name) === normalizeText(storeName));
   if (existing) {
     currentStore = existing;
     return;
   }
 
-  if (data?.length) {
-    currentStore = data[0];
-    return;
-  }
-
   const { data: created, error: createError } = await supabaseClient
     .from(supabaseConfig.tables.stores)
-    .insert({ name: STORE_NAME, whatsapp_number: `+${REPORT_PHONE}` })
+    .insert({ name: storeName, whatsapp_number: storePhone.startsWith("+") ? storePhone : `+${storePhone}` })
     .select()
     .single();
 
@@ -2007,7 +2414,8 @@ function sendWhatsappReport() {
     `Despesas: ${currency(report.expenses)}`,
     `Investimentos: ${currency(report.investments)}`
   ].join("\n");
-  window.open(`https://wa.me/${REPORT_PHONE}?text=${encodeURIComponent(text)}`, "_blank");
+  const phoneRaw = (getActiveStore()?.whatsapp || DEFAULT_REPORT_PHONE).replace(/[^0-9]/g, "");
+  window.open(`https://wa.me/${phoneRaw}?text=${encodeURIComponent(text)}`, "_blank");
 }
 
 async function copyDailyReport() {
