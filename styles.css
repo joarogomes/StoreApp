@@ -227,20 +227,12 @@ svg {
 }
 
 .login-logo {
-  width: 140px;
-  height: 140px;
-  margin: 0 auto;
+  width: 240px;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto 4px;
   object-fit: contain;
-  border-radius: 50%;
-  filter: drop-shadow(0 12px 24px rgba(13, 35, 65, 0.25));
-}
-
-.login-brand {
-  margin: 4px 0 0;
-  font-family: "Space Grotesk", sans-serif;
-  letter-spacing: 0.1em;
-  color: var(--ink);
-  font-size: 1.4rem;
+  filter: drop-shadow(0 12px 24px rgba(13, 35, 65, 0.18));
 }
 
 .login-card h2 {
