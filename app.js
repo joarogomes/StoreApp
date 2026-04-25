@@ -105,9 +105,11 @@ async function boot() {
   cleanupOrphanDefaultStore();
   cleanupSeedOperacaoUser();
   bindLogin();
+  bindFirstStoreSetup();
   const savedPassword = localStorage.getItem(ROLE_KEY);
   const savedUser = savedPassword ? users.find((u) => u.password === savedPassword) : null;
-  if (savedUser && allowedStoresFor(savedUser).length > 0) {
+  const adminWithoutStore = savedUser && savedUser.role === "admin" && stores.length === 0;
+  if (savedUser && (allowedStoresFor(savedUser).length > 0 || adminWithoutStore)) {
     await startSession(savedUser, { silent: true });
   } else {
     localStorage.removeItem(ROLE_KEY);
@@ -128,14 +130,10 @@ function loadStoresAndUsers() {
   } catch {
     users = [];
   }
-  if (!Array.isArray(stores) || stores.length === 0) {
-    stores = [{ id: DEFAULT_STORE_ID, name: DEFAULT_STORE_NAME, whatsapp: DEFAULT_REPORT_PHONE }];
-    persistStores();
-  }
+  if (!Array.isArray(stores)) stores = [];
   if (!Array.isArray(users) || users.length === 0) {
     users = [
-      { id: crypto.randomUUID(), username: "Administrador", password: "244100", role: "admin", allowedStoreIds: ["*"] },
-      { id: crypto.randomUUID(), username: "Operacao", password: "032026", role: "operacao", allowedStoreIds: [DEFAULT_STORE_ID] }
+      { id: crypto.randomUUID(), username: "Administrador", password: "244100", role: "admin", allowedStoreIds: ["*"] }
     ];
     persistUsers();
   }
@@ -316,10 +314,12 @@ function bindLogin() {
       return;
     }
     if (!allowedStoresFor(user).length) {
-      errorBox && (errorBox.textContent = "Usuario sem lojas atribuidas. Contacte o administrador.");
-      errorBox?.removeAttribute("hidden");
-      input.value = "";
-      return;
+      if (!(user.role === "admin" && stores.length === 0)) {
+        errorBox && (errorBox.textContent = "Usuario sem lojas atribuidas. Contacte o administrador.");
+        errorBox?.removeAttribute("hidden");
+        input.value = "";
+        return;
+      }
     }
     errorBox?.setAttribute("hidden", "");
     input.value = "";
@@ -331,6 +331,16 @@ async function startSession(user, { silent = false } = {}) {
   currentUser = user;
   currentRole = user.role;
   localStorage.setItem(ROLE_KEY, user.password);
+
+  if (stores.length === 0) {
+    if (user.role !== "admin") {
+      logout();
+      return;
+    }
+    showFirstStoreSetup();
+    return;
+  }
+
   activeStoreId = pickInitialStore(user);
   if (activeStoreId) localStorage.setItem(CURRENT_STORE_KEY, activeStoreId);
 
@@ -338,6 +348,7 @@ async function startSession(user, { silent = false } = {}) {
   productCatalog = loadProductCatalog();
 
   applyRolePermissions();
+  hideFirstStoreSetup();
   hideLoginScreen();
 
   if (!sessionStarted) {
@@ -366,7 +377,77 @@ function logout() {
   localStorage.removeItem(ROLE_KEY);
   currentUser = null;
   currentRole = null;
+  hideFirstStoreSetup();
   showLoginScreen();
+}
+
+function showFirstStoreSetup() {
+  document.getElementById("loginOverlay")?.setAttribute("hidden", "");
+  document.getElementById("appShell")?.setAttribute("hidden", "");
+  const overlay = document.getElementById("firstStoreOverlay");
+  if (!overlay) return;
+  overlay.removeAttribute("hidden");
+  const errorBox = document.getElementById("firstStoreError");
+  errorBox?.setAttribute("hidden", "");
+  document.getElementById("firstStoreName")?.focus();
+}
+
+function hideFirstStoreSetup() {
+  document.getElementById("firstStoreOverlay")?.setAttribute("hidden", "");
+}
+
+function bindFirstStoreSetup() {
+  const form = document.getElementById("firstStoreForm");
+  if (!form) return;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!currentUser || currentUser.role !== "admin") return;
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton?.disabled) return;
+    const data = new FormData(form);
+    const name = String(data.get("name") || "").trim();
+    let whatsapp = String(data.get("whatsapp") || "").trim();
+    const errorBox = document.getElementById("firstStoreError");
+    const showError = (message) => {
+      if (!errorBox) return;
+      errorBox.textContent = message;
+      errorBox.removeAttribute("hidden");
+    };
+    errorBox?.setAttribute("hidden", "");
+    if (errorBox) errorBox.textContent = "";
+    if (!name) {
+      showError("Indique o nome da loja.");
+      return;
+    }
+    if (whatsapp && !whatsapp.startsWith("+")) whatsapp = `+${whatsapp.replace(/[^0-9]/g, "")}`;
+    if (!whatsapp) whatsapp = DEFAULT_REPORT_PHONE;
+    const id = `loja-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const newStore = { id, name, whatsapp };
+    if (submitButton) submitButton.disabled = true;
+    try {
+      stores.push(newStore);
+      persistStores();
+      localStorage.setItem(CURRENT_STORE_KEY, id);
+    } catch (error) {
+      stores = stores.filter((s) => s !== newStore);
+      showError("Nao foi possivel guardar a loja. Verifique o armazenamento e tente de novo.");
+      if (submitButton) submitButton.disabled = false;
+      return;
+    }
+    form.reset();
+    hideFirstStoreSetup();
+    try {
+      await startSession(currentUser, { silent: true });
+    } catch (error) {
+      showError("Loja criada, mas houve uma falha ao iniciar a sessao. Recarregue a pagina.");
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+
+  document.getElementById("firstStoreLogout")?.addEventListener("click", () => {
+    logout();
+  });
 }
 
 function applyRolePermissions() {
