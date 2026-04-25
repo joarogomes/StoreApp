@@ -425,7 +425,8 @@ body.role-operacao .role-admin-only {
   align-self: flex-start;
 }
 
-.reports-toolbar {
+.reports-toolbar,
+.vendas-toolbar {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
