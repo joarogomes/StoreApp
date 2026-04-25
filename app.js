@@ -9,6 +9,7 @@ const ROLES = {
 const ROLE_LABELS = { admin: "Administrador", operacao: "Operacao" };
 
 let currentRole = null;
+let sessionStarted = false;
 const REPORT_PHONE = "244939667223";
 const STORE_NAME = "AGUA CRISTALINA";
 const today = new Date().toISOString().slice(0, 10);
@@ -133,8 +134,6 @@ function bindLogin() {
     startSession(role, password);
   });
 }
-
-let sessionStarted = false;
 
 async function startSession(role, password, { silent = false } = {}) {
   currentRole = role;
