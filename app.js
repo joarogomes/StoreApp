@@ -1,4 +1,5 @@
 const STORAGE_KEY = "agua-cristalina-data-v5";
+const ORPHAN_DEFAULT_CLEANUP_KEY = "agua-cristalina-orphan-default-cleanup-v1";
 const SUPABASE_KEY = "agua-cristalina-supabase-config-v2";
 const ROLE_KEY = "agua-cristalina-session";
 const STORES_KEY = "agua-cristalina-stores-v1";
@@ -100,6 +101,7 @@ boot();
 async function boot() {
   loadStoresAndUsers();
   migrateLegacyDataIfNeeded();
+  cleanupOrphanDefaultStore();
   bindLogin();
   const savedPassword = localStorage.getItem(ROLE_KEY);
   const savedUser = savedPassword ? users.find((u) => u.password === savedPassword) : null;
@@ -150,6 +152,86 @@ function migrateLegacyDataIfNeeded() {
   }
   if (legacyState) localStorage.removeItem(STORAGE_KEY);
   if (legacyProducts) localStorage.removeItem(`${STORAGE_KEY}:products`);
+}
+
+function defaultStoreHasUserData() {
+  try {
+    const raw = localStorage.getItem(stateKeyFor(DEFAULT_STORE_ID));
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return true;
+    const counts = [
+      Array.isArray(parsed.sales) ? parsed.sales.length : 0,
+      Array.isArray(parsed.finance) ? parsed.finance.length : 0,
+      Array.isArray(parsed.clients) ? parsed.clients.length : 0,
+      Array.isArray(parsed.stock) ? parsed.stock.length : 0,
+      Array.isArray(parsed.waterReadings) ? parsed.waterReadings.length : 0,
+      Array.isArray(parsed.maintenance) ? parsed.maintenance.length : 0
+    ];
+    return counts.some((n) => n > 0);
+  } catch {
+    return true;
+  }
+}
+
+function defaultStoreHasCustomProducts() {
+  try {
+    const raw = localStorage.getItem(productsKeyFor(DEFAULT_STORE_ID));
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return true;
+    return parsed.length > 0;
+  } catch {
+    return true;
+  }
+}
+
+function cleanupOrphanDefaultStore() {
+  if (localStorage.getItem(ORPHAN_DEFAULT_CLEANUP_KEY)) return;
+  if (!Array.isArray(stores) || stores.length <= 1) return;
+  const defaultStore = stores.find((s) => s.id === DEFAULT_STORE_ID);
+  if (!defaultStore) return;
+  if (defaultStore.name !== DEFAULT_STORE_NAME) return;
+  if (defaultStoreHasUserData()) return;
+  if (defaultStoreHasCustomProducts()) return;
+  const currentStoreId = localStorage.getItem(CURRENT_STORE_KEY);
+  if (currentStoreId === DEFAULT_STORE_ID) return;
+  const referencedByUser = Array.isArray(users) && users.some((u) => {
+    const ids = u?.allowedStoreIds;
+    return Array.isArray(ids) && !ids.includes("*") && ids.length === 1 && ids[0] === DEFAULT_STORE_ID;
+  });
+  if (referencedByUser) return;
+
+  const removedSnapshot = {
+    version: 1,
+    store: defaultStore,
+    state: localStorage.getItem(stateKeyFor(DEFAULT_STORE_ID)),
+    products: localStorage.getItem(productsKeyFor(DEFAULT_STORE_ID)),
+    timestamp: new Date().toISOString()
+  };
+  try {
+    localStorage.setItem(`${ORPHAN_DEFAULT_CLEANUP_KEY}:backup`, JSON.stringify(removedSnapshot));
+  } catch {
+    return;
+  }
+
+  stores = stores.filter((s) => s.id !== DEFAULT_STORE_ID);
+  persistStores();
+  localStorage.removeItem(stateKeyFor(DEFAULT_STORE_ID));
+  localStorage.removeItem(productsKeyFor(DEFAULT_STORE_ID));
+  if (Array.isArray(users) && users.length) {
+    let changed = false;
+    users = users.map((u) => {
+      if (!Array.isArray(u.allowedStoreIds)) return u;
+      if (u.allowedStoreIds.includes("*")) return u;
+      const filtered = u.allowedStoreIds.filter((id) => id !== DEFAULT_STORE_ID);
+      if (filtered.length === u.allowedStoreIds.length) return u;
+      changed = true;
+      return { ...u, allowedStoreIds: filtered.length ? filtered : [stores[0].id] };
+    });
+    if (changed) persistUsers();
+  }
+  localStorage.setItem(ORPHAN_DEFAULT_CLEANUP_KEY, "done");
 }
 
 function persistStores() {
