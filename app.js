@@ -547,30 +547,38 @@ function bindStoreSwitcher() {
   if (!select) return;
   select.addEventListener("change", async (event) => {
     const newId = event.target.value;
-    if (!newId || newId === activeStoreId) return;
-    if (!userHasAccessToStore(currentUser, newId)) {
-      alert("Voce nao tem acesso a esta loja.");
+    if (!newId || newId === activeStoreId) {
       renderStoreSwitcher();
       return;
     }
-    saveState();
-    activeStoreId = newId;
-    localStorage.setItem(CURRENT_STORE_KEY, newId);
-    state = loadState();
-    productCatalog = loadProductCatalog();
-    currentStore = null;
-    renderStoreSwitcher();
-    renderAccessManagement();
-    renderAll();
-    if (supabaseClient) {
-      try {
-        await ensureStore();
-        await syncFromSupabase(true);
-      } catch (error) {
-        console.warn("Falha ao trocar loja no Supabase:", error);
-      }
-    }
+    await switchActiveStore(newId);
   });
+}
+
+async function switchActiveStore(newId) {
+  if (!newId || newId === activeStoreId) return;
+  if (!userHasAccessToStore(currentUser, newId)) {
+    alert("Voce nao tem acesso a esta loja.");
+    renderStoreSwitcher();
+    return;
+  }
+  saveState();
+  activeStoreId = newId;
+  localStorage.setItem(CURRENT_STORE_KEY, newId);
+  state = loadState();
+  productCatalog = loadProductCatalog();
+  currentStore = null;
+  renderStoreSwitcher();
+  renderAccessManagement();
+  renderAll();
+  if (supabaseClient) {
+    try {
+      await ensureStore();
+      await syncFromSupabase(true);
+    } catch (error) {
+      console.warn("Falha ao trocar loja no Supabase:", error);
+    }
+  }
 }
 
 function renderStoreSwitcher() {
@@ -613,14 +621,17 @@ function renderStoresList() {
     .map((store) => {
       const isActive = store.id === activeStoreId;
       const canDelete = stores.length > 1;
+      const canActivate = userHasAccessToStore(currentUser, store.id) && !isActive;
       return `
-        <article class="entity-card" data-store-id="${escapeAttr(store.id)}">
+        <article class="entity-card${isActive ? " is-active" : ""}" data-store-id="${escapeAttr(store.id)}">
           <div class="entity-card-header">
             <div>
               <h4 class="entity-card-title">${escapeHtml(store.name)}${isActive ? " · activa" : ""}</h4>
               <p class="entity-card-meta">WhatsApp: ${escapeHtml(store.whatsapp || "-")}</p>
             </div>
             <div class="entity-card-tags">
+              ${canActivate ? `<button class="primary-button compact" data-action="activate-store" data-id="${escapeAttr(store.id)}">Activar</button>` : ""}
+              <button class="ghost-button compact" data-action="edit-store" data-id="${escapeAttr(store.id)}">Editar</button>
               ${canDelete ? `<button class="danger-button" data-action="delete-store" data-id="${escapeAttr(store.id)}">Remover</button>` : ""}
             </div>
           </div>
@@ -703,18 +714,50 @@ function onCreateStore(event) {
   renderStoreSwitcher();
 }
 
-function onStoresListAction(event) {
+async function onStoresListAction(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   if (!requireAdmin()) return;
   const id = button.dataset.id;
-  if (button.dataset.action === "delete-store") {
+  const action = button.dataset.action;
+  const store = stores.find((s) => s.id === id);
+  if (!store) return;
+
+  if (action === "activate-store") {
+    await switchActiveStore(id);
+    return;
+  }
+
+  if (action === "edit-store") {
+    const newName = prompt(`Novo nome da loja "${store.name}":`, store.name);
+    if (newName === null) return;
+    const trimmedName = String(newName).trim();
+    if (!trimmedName) {
+      alert("O nome da loja nao pode ficar em branco.");
+      return;
+    }
+    if (stores.some((s) => s.id !== id && normalizeText(s.name) === normalizeText(trimmedName))) {
+      alert("Ja existe outra loja com esse nome.");
+      return;
+    }
+    const newPhoneRaw = prompt(`WhatsApp para a loja "${trimmedName}" (formato +244...):`, store.whatsapp || DEFAULT_REPORT_PHONE);
+    if (newPhoneRaw === null) return;
+    let newPhone = String(newPhoneRaw).trim();
+    if (newPhone && !newPhone.startsWith("+")) newPhone = `+${newPhone.replace(/[^0-9]/g, "")}`;
+    store.name = trimmedName;
+    store.whatsapp = newPhone || DEFAULT_REPORT_PHONE;
+    persistStores();
+    if (id === activeStoreId) currentStore = null;
+    renderAccessManagement();
+    renderStoreSwitcher();
+    return;
+  }
+
+  if (action === "delete-store") {
     if (stores.length <= 1) {
       alert("Nao e possivel remover a unica loja.");
       return;
     }
-    const store = stores.find((s) => s.id === id);
-    if (!store) return;
     if (!confirm(`Remover a loja "${store.name}"? Os dados desta loja continuarao guardados, mas ela ficara inacessivel.`)) return;
     stores = stores.filter((s) => s.id !== id);
     persistStores();

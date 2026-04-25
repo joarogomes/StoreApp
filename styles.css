@@ -989,6 +989,18 @@ td {
   border: 1px solid rgba(7, 56, 95, 0.1);
 }
 
+.entity-card.is-active {
+  background: rgba(13, 132, 200, 0.1);
+  border-color: rgba(13, 132, 200, 0.35);
+  box-shadow: 0 6px 18px rgba(13, 132, 200, 0.12);
+}
+
+.entity-card .compact {
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  border-radius: 10px;
+}
+
 .entity-card-header {
   display: flex;
   justify-content: space-between;
