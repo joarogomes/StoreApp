@@ -276,7 +276,9 @@ function applyRolePermissions() {
   document.body.classList.toggle("role-operacao", currentRole === "operacao");
   const label = document.getElementById("sessionRoleLabel");
   if (label) {
-    label.textContent = currentUser?.username || ROLE_LABELS[currentRole] || "-";
+    const fullName = currentUser?.username || ROLE_LABELS[currentRole] || "-";
+    label.textContent = fullName.slice(0, 3);
+    label.title = fullName;
   }
 
   if (currentRole === "operacao") {
