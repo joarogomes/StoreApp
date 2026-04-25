@@ -1152,6 +1152,10 @@ body.menu-open .mobile-overlay {
   pointer-events: auto;
 }
 
+body.menu-open .app-header {
+  z-index: 1090;
+}
+
 @media (max-width: 1180px) {
   .header-account-label {
     display: none;
