@@ -2141,6 +2141,7 @@ async function onWaterEntry(event) {
     tds: Number(form.get("tds")),
     temperature: Number(form.get("temperature")),
     date: String(form.get("date")),
+    createdAt: new Date().toISOString(),
     notes: ""
   });
 
@@ -2832,101 +2833,55 @@ function buildDailyReportText() {
   const totalExpenses = todayExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
   const totalInvestments = todayInvestments.reduce((sum, item) => sum + (item.amount || 0), 0);
   const profit = totalSales - totalExpenses - totalInvestments;
-  const totalQuantity = todaySales.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
-  const productMap = new Map();
-  todaySales.forEach((item) => {
-    const name = findProduct(item.productId)?.name || item.productName || "Produto";
-    const acc = productMap.get(name) || { name, quantity: 0, total: 0 };
-    acc.quantity += Number(item.quantity || 0);
-    acc.total += Number(item.total || 0);
-    productMap.set(name, acc);
-  });
-  const topProducts = [...productMap.values()].sort((a, b) => b.total - a.total).slice(0, 3);
+  const totalTransactions = todaySales.length + todayExpenses.length + todayInvestments.length;
 
-  const paymentMethods = ["Consolidada", "TPA", "Express", "Saldo do cliente"];
-  const byPayment = paymentMethods
-    .map((method) => ({
-      method,
-      total: todaySales.filter((s) => s.paymentMethod === method).reduce((sum, s) => sum + (s.total || 0), 0)
-    }))
-    .filter((p) => p.total > 0);
-
-  const expenseGroups = new Map();
-  todayExpenses.forEach((item) => {
-    const key = item.category || "Outras despesas";
-    expenseGroups.set(key, (expenseGroups.get(key) || 0) + (item.amount || 0));
-  });
-  const expensesByCategory = [...expenseGroups.entries()]
-    .map(([category, total]) => ({ category, total }))
-    .sort((a, b) => b.total - a.total);
-
-  const clientsWithBalance = state.clients.filter((c) => (c.balance || 0) > 0).length;
-  const clientsWithDebt = state.clients.filter((c) => (c.debt || 0) > 0).length;
-  const totalDebt = state.clients.reduce((sum, c) => sum + (c.debt || 0), 0);
-
-  const lowStock = state.stock
-    .filter((item) => Number(item.quantity || 0) <= 2)
-    .map((item) => ({
-      name: findProduct(item.productId)?.name || item.productId,
-      quantity: Number(item.quantity || 0)
-    }));
+  const latestPh = [...state.waterReadings]
+    .filter((r) => r.ph != null && !Number.isNaN(Number(r.ph)))
+    .sort((a, b) => {
+      const ka = String(a.createdAt || a.date || "");
+      const kb = String(b.createdAt || b.date || "");
+      return kb.localeCompare(ka);
+    })[0];
 
   const storeName = getActiveStore()?.name || DEFAULT_STORE_NAME;
-  const dateLabel = formatDateShort(today);
 
   const lines = [];
-  lines.push(`*${storeName}*`);
-  lines.push(`Relatorio diario - ${dateLabel}`);
+  lines.push(`*${storeName} - Relatório Diário - ${today}*`);
   lines.push("");
-  lines.push("*RESUMO FINANCEIRO*");
-  lines.push(`- Vendas: ${currency(totalSales)} (${todaySales.length} ${todaySales.length === 1 ? "lancamento" : "lancamentos"})`);
-  lines.push(`- Despesas: ${currency(totalExpenses)}`);
-  lines.push(`- Investimentos: ${currency(totalInvestments)}`);
-  lines.push(`- *Lucro: ${currency(profit)}*`);
-
-  if (totalQuantity > 0) {
-    lines.push("");
-    lines.push(`*PRODUTOS VENDIDOS* (${totalQuantity} ${totalQuantity === 1 ? "unidade" : "unidades"})`);
-    topProducts.forEach((p) => {
-      lines.push(`- ${p.name}: ${p.quantity} un - ${currency(p.total)}`);
-    });
-  }
-
-  if (byPayment.length) {
-    lines.push("");
-    lines.push("*RECEBIMENTOS POR METODO*");
-    byPayment.forEach((p) => {
-      lines.push(`- ${p.method}: ${currency(p.total)}`);
-    });
-  }
-
-  if (expensesByCategory.length) {
-    lines.push("");
-    lines.push("*DESPESAS DETALHADAS*");
-    expensesByCategory.forEach((e) => {
-      lines.push(`- ${e.category}: ${currency(e.total)}`);
-    });
-  }
-
+  lines.push("💰 *Financeiro:*");
+  lines.push(`• Vendas: ${currency(totalSales)}`);
+  lines.push(`• Despesas: ${currency(totalExpenses)}`);
+  lines.push(`• Investimentos: ${currency(totalInvestments)}`);
+  lines.push(`• *Saldo Líquido: ${currency(profit)}*`);
   lines.push("");
-  lines.push("*CLIENTES*");
-  lines.push(`- Total cadastrados: ${state.clients.length}`);
-  lines.push(`- Com saldo: ${clientsWithBalance}`);
-  lines.push(`- Com divida: ${clientsWithDebt}${totalDebt > 0 ? ` (${currency(totalDebt)})` : ""}`);
-
-  if (lowStock.length) {
-    lines.push("");
-    lines.push("*ESTOQUE BAIXO*");
-    lowStock.forEach((item) => {
-      lines.push(`- ${item.name}: ${item.quantity} un`);
-    });
+  lines.push("💧 *Qualidade (Último pH):*");
+  if (latestPh) {
+    lines.push(`• Valor: ${Number(latestPh.ph).toFixed(2)} (${phStatus(latestPh.ph)})`);
+    lines.push(`• Data: ${formatPhDateTime(latestPh)}`);
+  } else {
+    lines.push("• Sem registos");
   }
-
   lines.push("");
-  lines.push(`Enviado por ${currentUser?.username || "-"}`);
+  lines.push("📊 *Resumo Operacional:*");
+  lines.push(`• Total de Transações: ${totalTransactions}`);
+  lines.push(`• Vendas Realizadas: ${todaySales.length}`);
 
   return lines.join("\n");
+}
+
+function formatPhDateTime(reading) {
+  const ts = reading.createdAt || (reading.date ? `${reading.date}T00:00:00` : null);
+  if (!ts) return "-";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return reading.date || "-";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy}, ${hh}:${min}:${ss}`;
 }
 
 function sendWhatsappReport() {
@@ -3557,7 +3512,11 @@ function phStatus(value) {
 }
 
 function currency(value) {
-  return `${Number(value || 0).toLocaleString("pt-PT")} Kz`;
+  const formatted = Number(value || 0)
+    .toLocaleString("pt-PT")
+    .replace(/\./g, " ")
+    .replace(/\u00A0/g, " ");
+  return `${formatted} Kz`;
 }
 
 function offsetDate(days) {

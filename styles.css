@@ -1247,12 +1247,19 @@ body.menu-open .app-header {
 
 @media (max-width: 860px) {
   .app-header {
-    padding: 12px 14px;
-    gap: 10px;
+    padding: 10px 14px;
+    gap: 6px;
   }
 
   .header-row {
-    gap: 10px;
+    gap: 8px;
+  }
+
+  .status-pill {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .mobile-menu-toggle {
@@ -1318,8 +1325,17 @@ body.menu-open .app-header {
     min-width: 0;
   }
 
+  .app-header {
+    box-shadow: 0 8px 18px rgba(11, 35, 65, 0.16);
+  }
+
   .main-content {
-    padding: 22px 16px 28px;
+    padding: 16px 16px 24px;
+    gap: 16px;
+  }
+
+  .topbar {
+    gap: 10px;
   }
 }
 
