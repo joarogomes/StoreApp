@@ -2715,9 +2715,9 @@ function buildBuckets(period, anchor) {
     });
   }
   if (period === "weekly") {
-    return Array.from({ length: 8 }, (_, idx) => {
+    return Array.from({ length: 4 }, (_, idx) => {
       const d = new Date(anchorDate.getTime());
-      d.setUTCDate(d.getUTCDate() - (7 - idx) * 7);
+      d.setUTCDate(d.getUTCDate() - (3 - idx) * 7);
       const sunday = startOfWeekUtc(d);
       const saturday = new Date(sunday.getTime());
       saturday.setUTCDate(saturday.getUTCDate() + 6);
