@@ -634,6 +634,14 @@ function bindForms() {
     event.preventDefault();
     onAdjustClient(form);
   });
+  document.getElementById("clientsList")?.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-client-action]");
+    if (!button) return;
+    const action = button.dataset.clientAction;
+    const clientId = button.dataset.clientId;
+    if (action === "edit") onEditClient(clientId);
+    else if (action === "delete") onDeleteClient(clientId);
+  });
   document.getElementById("productForm")?.addEventListener("submit", onCreateProduct);
   document.getElementById("stockForm")?.addEventListener("submit", onUpdateStock);
   document.getElementById("financeForm")?.addEventListener("submit", onFinanceEntry);
@@ -1552,15 +1560,15 @@ function renderClients() {
     row.innerHTML = `
       <div class="client-row-info">
         <div>
-          <strong>${client.name}</strong>
-          <small>${client.phone || ""} | ${client.address || ""}</small>
+          <strong>${escapeHtml(client.name)}</strong>
+          <small>${escapeHtml(client.phone || "")} | ${escapeHtml(client.address || "")}</small>
         </div>
         <div class="balance-stack">
           <span class="badge ${client.balance > 0 ? "success" : "muted"}">Saldo: ${currency(client.balance)}</span>
           <span class="badge ${debt > 0 ? "danger" : "muted"}">Divida: ${currency(debt)}</span>
         </div>
       </div>
-      <form class="client-adjust-form" data-client-id="${client.id}">
+      <form class="client-adjust-form" data-client-id="${escapeAttr(client.id)}">
         <input type="number" name="amount" min="0.01" step="0.01" placeholder="Valor (Kz)" required>
         <select name="action" aria-label="Tipo de ajuste">
           <option value="deposit">Saldo</option>
@@ -1568,9 +1576,82 @@ function renderClients() {
         </select>
         <button class="primary-button" type="submit">Aplicar</button>
       </form>
+      <div class="client-admin-actions role-admin-only">
+        <button type="button" class="ghost-button" data-client-action="edit" data-client-id="${escapeAttr(client.id)}">Editar</button>
+        <button type="button" class="ghost-button danger" data-client-action="delete" data-client-id="${escapeAttr(client.id)}">Excluir</button>
+      </div>
     `;
     target.appendChild(row);
   });
+}
+
+async function onEditClient(clientId) {
+  if (!requireAdmin()) return;
+  const client = findClient(clientId);
+  if (!client) return alert("Cliente nao encontrado.");
+
+  const newName = prompt("Nome do cliente:", client.name || "");
+  if (newName === null) return;
+  const trimmedName = newName.trim();
+  if (!trimmedName) return alert("Nome nao pode ficar vazio.");
+
+  const newPhone = prompt("Telefone:", client.phone || "");
+  if (newPhone === null) return;
+
+  const newAddress = prompt("Endereco:", client.address || "");
+  if (newAddress === null) return;
+
+  client.name = trimmedName;
+  client.phone = newPhone.trim();
+  client.address = newAddress.trim();
+
+  // Update cached customer name on past sales so reports stay consistent.
+  state.sales.forEach((sale) => {
+    if (sale.clientId && String(sale.clientId) === String(client.id)) {
+      sale.customerName = trimmedName;
+    }
+  });
+
+  await persistMutation({
+    success: "Cliente actualizado e sincronizado.",
+    fallback: "Cliente actualizado localmente."
+  });
+  renderAll();
+}
+
+async function onDeleteClient(clientId) {
+  if (!requireAdmin()) return;
+  const client = findClient(clientId);
+  if (!client) return alert("Cliente nao encontrado.");
+
+  const balance = client.balance || 0;
+  const debt = client.debt || 0;
+  const warnings = [];
+  if (balance > 0) warnings.push(`Saldo a favor: ${currency(balance)}`);
+  if (debt > 0) warnings.push(`Divida em aberto: ${currency(debt)}`);
+  const linkedSales = state.sales.filter((s) => String(s.clientId) === String(client.id)).length;
+  if (linkedSales > 0) warnings.push(`${linkedSales} ${linkedSales === 1 ? "lancamento" : "lancamentos"} no historico`);
+
+  const safeName = String(client.name || "").replace(/[\r\n\t\u0000-\u001F\u007F]+/g, " ").trim().slice(0, 80) || "(sem nome)";
+  const message = `Excluir o cliente "${safeName}"?` +
+    (warnings.length ? `\n\nAtencao:\n- ${warnings.join("\n- ")}\n\nO historico de vendas mantem o nome para registo, mas o cliente sera removido da lista.` : "");
+  if (!confirm(message)) return;
+
+  // Detach the client from past sales so they no longer reference a missing record,
+  // while keeping the customer name visible in reports.
+  state.sales.forEach((sale) => {
+    if (String(sale.clientId) === String(client.id)) {
+      sale.customerName = sale.customerName || client.name;
+      sale.clientId = "";
+    }
+  });
+  state.clients = state.clients.filter((c) => String(c.id) !== String(client.id));
+
+  await persistMutation({
+    success: "Cliente excluido e sincronizado.",
+    fallback: "Cliente excluido localmente."
+  });
+  renderAll();
 }
 
 async function onAdjustClient(form) {
@@ -2493,7 +2574,7 @@ function serializeMaintenanceRow(item) {
 function buildPeriodStats(period, anchor = today) {
   const buckets = buildBuckets(period, anchor);
   const salesEntries = entriesThatCountAsSales();
-  const expenseEntries = state.finance.filter((item) => item.type === "expense");
+  const expenseEntries = getAllExpenseEntries();
   const investmentEntries = state.finance.filter((item) => item.type === "investment");
 
   // Headline numbers reflect ONLY the selected period (single day / week / month / year).
@@ -2684,7 +2765,7 @@ const SHORT_MONTH_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago
 
 function buildDailyReport() {
   const sales = entriesThatCountAsSales().filter((item) => item.date === today).reduce((sum, item) => sum + item.total, 0);
-  const expenses = state.finance.filter((item) => item.type === "expense" && item.date === today).reduce((sum, item) => sum + item.amount, 0);
+  const expenses = getAllExpenseEntries().filter((item) => item.date === today).reduce((sum, item) => sum + item.amount, 0);
   const investments = state.finance.filter((item) => item.type === "investment" && item.date === today).reduce((sum, item) => sum + item.amount, 0);
 
   return {
@@ -2708,7 +2789,7 @@ function buildMonthlyReport() {
     })
     .reduce((sum, item) => sum + item.total, 0);
 
-  const expenses = state.finance.filter((item) => item.type === "expense" && sameMonth(item.date, today)).reduce((sum, item) => sum + item.amount, 0);
+  const expenses = getAllExpenseEntries().filter((item) => sameMonth(item.date, today)).reduce((sum, item) => sum + item.amount, 0);
   const investments = state.finance.filter((item) => item.type === "investment" && sameMonth(item.date, today)).reduce((sum, item) => sum + item.amount, 0);
 
   return {
@@ -2721,15 +2802,114 @@ function buildMonthlyReport() {
   };
 }
 
+function buildDailyReportText() {
+  const todaySales = entriesThatCountAsSales().filter((item) => item.date === today);
+  const todayExpenses = getAllExpenseEntries().filter((item) => item.date === today);
+  const todayInvestments = state.finance.filter((item) => item.type === "investment" && item.date === today);
+
+  const totalSales = todaySales.reduce((sum, item) => sum + (item.total || 0), 0);
+  const totalExpenses = todayExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const totalInvestments = todayInvestments.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const profit = totalSales - totalExpenses - totalInvestments;
+  const totalQuantity = todaySales.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
+  const productMap = new Map();
+  todaySales.forEach((item) => {
+    const name = findProduct(item.productId)?.name || item.productName || "Produto";
+    const acc = productMap.get(name) || { name, quantity: 0, total: 0 };
+    acc.quantity += Number(item.quantity || 0);
+    acc.total += Number(item.total || 0);
+    productMap.set(name, acc);
+  });
+  const topProducts = [...productMap.values()].sort((a, b) => b.total - a.total).slice(0, 3);
+
+  const paymentMethods = ["Consolidada", "TPA", "Express", "Saldo do cliente"];
+  const byPayment = paymentMethods
+    .map((method) => ({
+      method,
+      total: todaySales.filter((s) => s.paymentMethod === method).reduce((sum, s) => sum + (s.total || 0), 0)
+    }))
+    .filter((p) => p.total > 0);
+
+  const expenseGroups = new Map();
+  todayExpenses.forEach((item) => {
+    const key = item.category || "Outras despesas";
+    expenseGroups.set(key, (expenseGroups.get(key) || 0) + (item.amount || 0));
+  });
+  const expensesByCategory = [...expenseGroups.entries()]
+    .map(([category, total]) => ({ category, total }))
+    .sort((a, b) => b.total - a.total);
+
+  const clientsWithBalance = state.clients.filter((c) => (c.balance || 0) > 0).length;
+  const clientsWithDebt = state.clients.filter((c) => (c.debt || 0) > 0).length;
+  const totalDebt = state.clients.reduce((sum, c) => sum + (c.debt || 0), 0);
+
+  const lowStock = state.stock
+    .filter((item) => Number(item.quantity || 0) <= 2)
+    .map((item) => ({
+      name: findProduct(item.productId)?.name || item.productId,
+      quantity: Number(item.quantity || 0)
+    }));
+
+  const storeName = getActiveStore()?.name || DEFAULT_STORE_NAME;
+  const dateLabel = formatDateShort(today);
+
+  const lines = [];
+  lines.push(`*${storeName}*`);
+  lines.push(`Relatorio diario - ${dateLabel}`);
+  lines.push("");
+  lines.push("*RESUMO FINANCEIRO*");
+  lines.push(`- Vendas: ${currency(totalSales)} (${todaySales.length} ${todaySales.length === 1 ? "lancamento" : "lancamentos"})`);
+  lines.push(`- Despesas: ${currency(totalExpenses)}`);
+  lines.push(`- Investimentos: ${currency(totalInvestments)}`);
+  lines.push(`- *Lucro: ${currency(profit)}*`);
+
+  if (totalQuantity > 0) {
+    lines.push("");
+    lines.push(`*PRODUTOS VENDIDOS* (${totalQuantity} ${totalQuantity === 1 ? "unidade" : "unidades"})`);
+    topProducts.forEach((p) => {
+      lines.push(`- ${p.name}: ${p.quantity} un - ${currency(p.total)}`);
+    });
+  }
+
+  if (byPayment.length) {
+    lines.push("");
+    lines.push("*RECEBIMENTOS POR METODO*");
+    byPayment.forEach((p) => {
+      lines.push(`- ${p.method}: ${currency(p.total)}`);
+    });
+  }
+
+  if (expensesByCategory.length) {
+    lines.push("");
+    lines.push("*DESPESAS DETALHADAS*");
+    expensesByCategory.forEach((e) => {
+      lines.push(`- ${e.category}: ${currency(e.total)}`);
+    });
+  }
+
+  lines.push("");
+  lines.push("*CLIENTES*");
+  lines.push(`- Total cadastrados: ${state.clients.length}`);
+  lines.push(`- Com saldo: ${clientsWithBalance}`);
+  lines.push(`- Com divida: ${clientsWithDebt}${totalDebt > 0 ? ` (${currency(totalDebt)})` : ""}`);
+
+  if (lowStock.length) {
+    lines.push("");
+    lines.push("*ESTOQUE BAIXO*");
+    lowStock.forEach((item) => {
+      lines.push(`- ${item.name}: ${item.quantity} un`);
+    });
+  }
+
+  lines.push("");
+  lines.push(`Enviado por ${currentUser?.username || "-"}`);
+
+  return lines.join("\n");
+}
+
 function sendWhatsappReport() {
-  const report = buildDailyReport();
-  const text = [
-    `AGUA CRISTALINA - Relatorio diario (${today})`,
-    `Vendas do dia: ${currency(report.sales)}`,
-    `Lucro: ${currency(report.profit)}`,
-    `Despesas: ${currency(report.expenses)}`,
-    `Investimentos: ${currency(report.investments)}`
-  ].join("\n");
+  const text = buildDailyReportText();
   const phoneRaw = (getActiveStore()?.whatsapp || DEFAULT_REPORT_PHONE).replace(/[^0-9]/g, "");
   window.open(`https://wa.me/${phoneRaw}?text=${encodeURIComponent(text)}`, "_blank");
 }
@@ -2763,7 +2943,7 @@ function buildMonthlyDataset() {
     return d.getMonth() === month && d.getFullYear() === year;
   });
 
-  const monthExpenses = state.finance.filter((f) => f.type === "expense" && sameMonth(f.date, today));
+  const monthExpenses = getAllExpenseEntries().filter((f) => sameMonth(f.date, today));
   const monthInvestments = state.finance.filter((f) => f.type === "investment" && sameMonth(f.date, today));
 
   const totals = {
@@ -3203,14 +3383,7 @@ function slugify(value) {
 }
 
 async function copyDailyReport() {
-  const report = buildDailyReport();
-  const text = [
-    `AGUA CRISTALINA - Relatorio diario (${today})`,
-    `Vendas: ${currency(report.sales)}`,
-    `Lucro: ${currency(report.profit)}`,
-    `Despesas: ${currency(report.expenses)}`,
-    `Investimentos: ${currency(report.investments)}`
-  ].join("\n");
+  const text = buildDailyReportText();
 
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -3225,6 +3398,23 @@ function entriesThatCountAsSales() {
   // Sale, deposit, settlement count as sales of the day.
   // Withdrawal and debt do NOT count.
   return state.sales.filter((item) => item.entryType !== "withdrawal" && item.entryType !== "debt");
+}
+
+// Returns all entries that count as expenses: finance expenses + maintenance costs.
+// Maintenance items are normalized to look like a finance expense entry so they can be
+// summed and listed alongside regular expenses (PDF tables, dashboards, reports, etc.).
+function getAllExpenseEntries() {
+  const finance = state.finance.filter((item) => item.type === "expense");
+  const maintenance = state.maintenance.map((item) => ({
+    id: `maint-${item.id}`,
+    type: "expense",
+    category: "Manutencao",
+    description: item.title || item.notes || "Manutencao",
+    amount: Number(item.cost) || 0,
+    date: item.date,
+    source: "maintenance"
+  }));
+  return [...finance, ...maintenance];
 }
 
 function migrateClientsForDebt() {
@@ -3373,7 +3563,7 @@ function renderSalePreview() {
 
 function buildFinanceAnalytics(period, anchor = today) {
   const buckets = buildBuckets(period, anchor);
-  const expenseEntries = state.finance.filter((item) => item.type === "expense");
+  const expenseEntries = getAllExpenseEntries();
   const investmentEntries = state.finance.filter((item) => item.type === "investment");
   const inAnyBucket = (date) => buckets.some((b) => b.contains(date));
   const filteredExpenses = expenseEntries.filter((item) => inAnyBucket(item.date));
