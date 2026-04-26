@@ -2,8 +2,17 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>AGUA CRISTALINA</title>
+  <meta name="description" content="Gestao inteligente de loja de agua filtrada e purificada.">
+  <meta name="theme-color" content="#0b2341">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <link rel="apple-touch-icon" href="assets/logo.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Agua Cristalina">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
@@ -121,7 +130,7 @@
                 <div class="series-toggles" id="seriesToggles">
                   <label class="series-toggle"><input type="checkbox" data-series="sales" checked><span class="series-dot sales"></span>Vendas</label>
                   <label class="series-toggle"><input type="checkbox" data-series="expenses" checked><span class="series-dot expenses"></span>Despesas</label>
-                  <label class="series-toggle role-admin-only"><input type="checkbox" data-series="profit" checked><span class="series-dot profit"></span>Lucro</label>
+                  <label class="series-toggle"><input type="checkbox" data-series="profit" checked><span class="series-dot profit"></span>Lucro</label>
                 </div>
               </div>
             </div>
@@ -131,7 +140,7 @@
             </div>
           </section>
 
-          <section class="panel role-admin-only">
+          <section class="panel">
             <div class="panel-header">
               <div>
                 <p class="card-label">KPI por produto</p>
@@ -144,7 +153,7 @@
             </div>
           </section>
 
-          <section class="panel role-admin-only">
+          <section class="panel">
             <div class="panel-header">
               <div>
                 <p class="card-label">Distribuicao</p>
@@ -154,11 +163,11 @@
             <div class="payment-breakdown" id="paymentBreakdown"></div>
           </section>
 
-          <section class="panel role-admin-only">
+          <section class="panel">
             <div class="panel-header">
               <div>
                 <p class="card-label">Clientes</p>
-                <h3>Saldo acumulado</h3>
+                <h3>Saldo e dividas</h3>
               </div>
             </div>
             <div id="clientBalances" class="list-stack"></div>

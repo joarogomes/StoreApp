@@ -98,6 +98,17 @@ const financePeriodButtons = [...document.querySelectorAll("#financePeriodSwitch
 const waterMetricButtons = [...document.querySelectorAll("#waterMetricSwitch .period-button")];
 
 boot();
+registerServiceWorker();
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+    return;
+  }
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js").catch(() => null);
+  });
+}
 
 async function boot() {
   loadStoresAndUsers();
@@ -478,9 +489,9 @@ function applyRolePermissions() {
       saleDate.min = today;
       saleDate.max = today;
     }
-    activeSeries.profit = false;
+    activeSeries.profit = true;
     document.querySelectorAll('#seriesToggles input[data-series="profit"]').forEach((input) => {
-      input.checked = false;
+      input.checked = true;
     });
   } else {
     const saleDate = document.getElementById("saleDate");
@@ -1438,19 +1449,29 @@ function renderClientBalances() {
   const target = document.getElementById("clientBalances");
   target.innerHTML = "";
 
-  [...state.clients]
-    .sort((a, b) => (b.balance + (b.debt || 0)) - (a.balance + (a.debt || 0)))
+  const filtered = state.clients.filter((c) => (c.balance || 0) > 0 || (c.debt || 0) > 0);
+  if (!filtered.length) {
+    const empty = document.createElement("p");
+    empty.className = "helper-note";
+    empty.textContent = "Nenhum cliente com saldo ou divida.";
+    target.appendChild(empty);
+    return;
+  }
+
+  filtered
+    .sort((a, b) => ((b.debt || 0) + (b.balance || 0)) - ((a.debt || 0) + (a.balance || 0)))
     .forEach((client) => {
       const row = document.createElement("div");
       row.className = "list-row";
       const debt = client.debt || 0;
+      const balance = client.balance || 0;
       row.innerHTML = `
         <div>
-          <strong>${client.name}</strong>
-          <small>${client.phone || ""}</small>
+          <strong>${escapeHtml(client.name)}</strong>
+          <small>${escapeHtml(client.phone || "")}</small>
         </div>
         <div class="balance-stack">
-          <span class="badge ${client.balance > 0 ? "success" : "muted"}">Saldo: ${currency(client.balance)}</span>
+          ${balance > 0 ? `<span class="badge success">Saldo: ${currency(balance)}</span>` : ""}
           ${debt > 0 ? `<span class="badge danger">Divida: ${currency(debt)}</span>` : ""}
         </div>
       `;

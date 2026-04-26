@@ -1,0 +1,28 @@
+{
+  "name": "AGUA CRISTALINA",
+  "short_name": "Agua Cristalina",
+  "description": "Gestao inteligente de loja de agua filtrada e purificada.",
+  "lang": "pt",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0b2341",
+  "background_color": "#0b2341",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "assets/logo.png",
+      "sizes": "192x192 512x512 any",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/logo.png",
+      "sizes": "512x512 any",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
