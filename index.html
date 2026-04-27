@@ -88,6 +88,7 @@
         <button class="nav-tab role-admin-only" data-view="estoque">Estoque</button>
         <button class="nav-tab role-admin-only" data-view="financas">Finanças</button>
         <button class="nav-tab" data-view="agua">Água</button>
+        <button class="nav-tab role-admin-only" data-view="facturacao">Facturação</button>
         <button class="nav-tab role-admin-only" data-view="relatorios">Relatórios</button>
         <button class="nav-tab role-admin-only" data-view="acessos">Acessos</button>
       </nav>
@@ -342,6 +343,10 @@
                 Endereco
                 <input type="text" name="address" placeholder="Bairro, rua ou referencia" required>
               </label>
+              <label>
+                NIF (opcional)
+                <input type="text" name="nif" placeholder="Ex.: 5417000000 ou 999999999" pattern="[0-9A-Za-z]{9,14}">
+              </label>
               <button class="primary-button" type="submit">Adicionar cliente</button>
             </form>
           </section>
@@ -402,6 +407,15 @@
                 <label>
                   Custo unitario
                   <input type="number" name="unitCost" min="0" step="0.01" value="0">
+                </label>
+                <label>
+                  Taxa IVA (%)
+                  <select name="vatRate">
+                    <option value="14">Normal — 14%</option>
+                    <option value="7">Reduzida — 7%</option>
+                    <option value="5">Intermédia — 5%</option>
+                    <option value="0">Isenta — 0%</option>
+                  </select>
                 </label>
                 <button class="primary-button" type="submit">Criar produto</button>
               </form>
@@ -684,6 +698,68 @@
         </section>
       </section>
 
+      <section class="view" id="facturacao">
+        <div class="invoices-toolbar">
+          <div class="invoices-toolbar-actions">
+            <label class="invoices-period">
+              Mês de referência
+              <input type="month" id="invoiceMonth">
+            </label>
+            <button type="button" class="ghost-button" id="exportSaftButton">Exportar SAF-T (AO) do mês</button>
+          </div>
+          <p class="helper-note" id="invoiceFiscalSummary"></p>
+        </div>
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="card-label">Documentos emitidos</p>
+              <h3>Facturas, recibos e notas</h3>
+              <p class="helper-note">A numeração é sequencial por série e tipo. Os documentos não podem ser apagados — apenas anulados (com motivo) e substituídos por uma nova emissão.</p>
+            </div>
+          </div>
+          <div class="filter-grid">
+            <label>
+              Tipo
+              <select id="invoiceFilterType">
+                <option value="">Todos</option>
+                <option value="FT">FT — Factura</option>
+                <option value="FR">FR — Factura/Recibo</option>
+                <option value="RC">RC — Recibo</option>
+                <option value="NC">NC — Nota de Crédito</option>
+                <option value="ND">ND — Nota de Débito</option>
+              </select>
+            </label>
+            <label>
+              Estado
+              <select id="invoiceFilterStatus">
+                <option value="">Todos</option>
+                <option value="issued">Emitidos</option>
+                <option value="cancelled">Anulados</option>
+              </select>
+            </label>
+            <label>
+              Cliente
+              <input type="text" id="invoiceFilterClient" placeholder="Nome ou NIF">
+            </label>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Documento</th>
+                  <th>Data</th>
+                  <th>Cliente</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                  <th>Acções</th>
+                </tr>
+              </thead>
+              <tbody id="invoicesTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
       <section class="view" id="acessos">
         <div class="two-column">
           <section class="panel">
@@ -706,6 +782,84 @@
               <button class="primary-button full-width" type="submit">Adicionar loja</button>
             </form>
             <div id="storesList" class="entity-list"></div>
+          </section>
+
+          <section class="panel full-width-panel">
+            <div class="panel-header">
+              <div>
+                <p class="card-label">Facturação AGT</p>
+                <h3>Configuração fiscal da loja activa</h3>
+                <p class="helper-note">Estes dados aparecem em todas as facturas e no ficheiro SAF-T (AO). O Número de validação do software só pode ser preenchido depois de a AGT certificar o programa.</p>
+              </div>
+            </div>
+            <form id="fiscalConfigForm" class="form-grid">
+              <label>
+                NIF do produtor
+                <input type="text" name="nif" id="fiscalNif" placeholder="Ex.: 5417000000" pattern="[0-9A-Za-z]{9,14}" required>
+              </label>
+              <label>
+                Designação fiscal
+                <input type="text" name="legalName" id="fiscalLegalName" placeholder="Razão social registada na AGT" required>
+              </label>
+              <label class="full-width">
+                Endereço fiscal
+                <input type="text" name="address" id="fiscalAddress" placeholder="Endereço da sede registado na AGT" required>
+              </label>
+              <label>
+                Município
+                <input type="text" name="municipality" id="fiscalMunicipality" placeholder="Ex.: Luanda">
+              </label>
+              <label>
+                Província
+                <input type="text" name="province" id="fiscalProvince" placeholder="Ex.: Luanda">
+              </label>
+              <label>
+                Regime de IVA
+                <select name="fiscalRegime" id="fiscalRegime">
+                  <option value="GERAL">Regime Geral</option>
+                  <option value="SIMPLIFICADO">Regime Simplificado</option>
+                  <option value="NAO_SUJEICAO">Não sujeição</option>
+                  <option value="ISENTO">Isento</option>
+                </select>
+              </label>
+              <label>
+                Taxa IVA padrão (%)
+                <select name="defaultVatRate" id="fiscalDefaultVatRate">
+                  <option value="14">Normal — 14%</option>
+                  <option value="7">Reduzida — 7%</option>
+                  <option value="5">Intermédia — 5%</option>
+                  <option value="0">Isenta / Não sujeito — 0%</option>
+                </select>
+              </label>
+              <label>
+                Série de facturação
+                <input type="text" name="documentSeries" id="fiscalSeries" placeholder="Ex.: A2026" pattern="[A-Za-z0-9]{1,8}" required>
+              </label>
+              <label>
+                Tipo de documento por defeito
+                <select name="defaultDocumentType" id="fiscalDefaultDocType">
+                  <option value="FR">FR — Factura/Recibo</option>
+                  <option value="FT">FT — Factura</option>
+                </select>
+              </label>
+              <label class="full-width">
+                Nº de validação do software (AGT)
+                <input type="text" name="softwareValidationNumber" id="fiscalSoftwareNumber" placeholder="Deixar em branco até a AGT atribuir">
+              </label>
+              <label class="full-width">
+                Motivo de isenção por defeito (se IVA = 0%)
+                <select name="defaultExemptionReason" id="fiscalDefaultExemption">
+                  <option value="">— sem motivo —</option>
+                  <option value="M01">M01 — Artigo 12.º do CIVA</option>
+                  <option value="M02">M02 — Artigo 13.º do CIVA</option>
+                  <option value="M04">M04 — Operação não localizada em território angolano</option>
+                  <option value="M07">M07 — Regime de IVA Simplificado</option>
+                  <option value="M99">M99 — Outras isenções (declarar fundamentação)</option>
+                </select>
+              </label>
+              <button class="primary-button full-width" type="submit">Guardar configuração fiscal</button>
+              <p class="helper-note full-width" id="fiscalConfigStatus"></p>
+            </form>
           </section>
 
           <section class="panel">

@@ -1506,3 +1506,63 @@ body.menu-open .app-header {
     font-size: 0.85rem;
   }
 }
+
+/* AGT facturação */
+.invoices-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.invoices-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.invoices-period {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  color: var(--muted, #5b6477);
+}
+.invoices-period input {
+  margin-top: 4px;
+}
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 12px 0 16px;
+}
+.filter-grid label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  color: var(--muted, #5b6477);
+}
+.empty-row {
+  text-align: center;
+  padding: 18px;
+  color: var(--muted, #6b7280);
+  font-style: italic;
+}
+.doc-cancelled {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+.doc-cancelled .badge {
+  text-decoration: none;
+}
+.invoice-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ghost-button.danger {
+  color: #b41c1c;
+  border-color: #f0c0c0;
+}
+.ghost-button.danger:hover {
+  background: #fff2f2;
+}

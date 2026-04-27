@@ -12,6 +12,30 @@ const DEFAULT_STORE_NAME = "AGUA CRISTALINA";
 const DEFAULT_REPORT_PHONE = "+244939667223";
 const ROLE_LABELS = { admin: "Administrador", operacao: "Operacao" };
 
+const VAT_RATES = [14, 7, 5, 0];
+const FISCAL_REGIMES = {
+  GERAL: "Regime Geral",
+  SIMPLIFICADO: "Regime Simplificado",
+  NAO_SUJEICAO: "Não sujeição",
+  ISENTO: "Isento"
+};
+const DOCUMENT_TYPES = {
+  FT: "Factura",
+  FR: "Factura/Recibo",
+  RC: "Recibo",
+  NC: "Nota de Crédito",
+  ND: "Nota de Débito"
+};
+const VAT_EXEMPTION_REASONS = {
+  M01: "Artigo 12.º do CIVA",
+  M02: "Artigo 13.º do CIVA",
+  M04: "Operação não localizada em território angolano",
+  M07: "Regime de IVA Simplificado",
+  M99: "Outras isenções (declarar fundamentação)"
+};
+const SOFTWARE_PRODUCT_VERSION = "1.0.0";
+const SOFTWARE_PRODUCT_NAME = "AGUA CRISTALINA Gestao";
+
 let currentRole = null;
 let currentUser = null;
 let sessionStarted = false;
@@ -539,7 +563,8 @@ function emptyState() {
     sales: [],
     finance: [],
     waterReadings: [],
-    maintenance: []
+    maintenance: [],
+    documents: []
   };
 }
 
@@ -799,6 +824,8 @@ function renderStoreSwitcher() {
 
 function bindAccessManagement() {
   document.getElementById("storeForm")?.addEventListener("submit", onCreateStore);
+  document.getElementById("fiscalConfigForm")?.addEventListener("submit", onSaveFiscalConfig);
+  bindInvoicesView();
   document.getElementById("userForm")?.addEventListener("submit", onCreateUser);
   document.getElementById("storesList")?.addEventListener("click", onStoresListAction);
   document.getElementById("usersList")?.addEventListener("click", onUsersListAction);
@@ -1088,6 +1115,8 @@ function renderAll() {
   renderFinance();
   renderWater();
   renderReports();
+  renderInvoicesView();
+  renderFiscalConfigForm();
   renderSyncStatus();
 }
 
@@ -1622,9 +1651,13 @@ async function onEditClient(clientId) {
   const newAddress = prompt("Endereco:", client.address || "");
   if (newAddress === null) return;
 
+  const newNif = prompt("NIF (deixe vazio para Consumidor Final):", client.nif || "");
+  if (newNif === null) return;
+
   client.name = trimmedName;
   client.phone = newPhone.trim();
   client.address = newAddress.trim();
+  client.nif = newNif.trim();
 
   // Update cached customer name on past sales so reports stay consistent.
   state.sales.forEach((sale) => {
@@ -1984,30 +2017,59 @@ async function onCreateSale(event) {
     client.balance -= total;
   }
 
-  state.sales.unshift({
-    id: crypto.randomUUID(),
-    clientId,
-    customerName: client?.name || "Cliente avulso",
-    productId,
-    productName: product.name,
-    quantity,
-    paymentMethod,
-    entryType,
-    date,
-    total,
-    costTotal
-  });
+  const formEl = event.currentTarget;
+  const submitButton = formEl.querySelector('button[type="submit"]');
+  const previousLabel = submitButton?.textContent;
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "A emitir...";
+  }
+  try {
+    const saleRecord = {
+      id: crypto.randomUUID(),
+      clientId,
+      customerName: client?.name || "Cliente avulso",
+      productId,
+      productName: product.name,
+      quantity,
+      paymentMethod,
+      entryType,
+      date,
+      total,
+      costTotal
+    };
+    state.sales.unshift(saleRecord);
 
-  await persistMutation({
-    success: "Venda guardada e sincronizada.",
-    fallback: "Venda guardada localmente."
-  });
+    let issuedDoc = null;
+    if (entryType === "sale" && isFiscalConfigured()) {
+      try {
+        const fiscal = getActiveStoreFiscal();
+        const docType = fiscal.defaultDocumentType || "FR";
+        issuedDoc = await issueFiscalDocument({ type: docType, sale: saleRecord });
+        saleRecord.documentNumber = issuedDoc.documentNumber;
+        saleRecord.documentId = issuedDoc.id;
+      } catch (err) {
+        console.error("Erro ao emitir documento fiscal", err);
+        alert("Aviso: não foi possível emitir o documento fiscal. " + (err?.message || ""));
+      }
+    }
 
-  if (movement) await insertStockMovement(movement);
+    await persistMutation({
+      success: issuedDoc ? `Venda guardada. Documento ${issuedDoc.documentNumber} emitido.` : "Venda guardada e sincronizada.",
+      fallback: "Venda guardada localmente."
+    });
 
-  event.currentTarget.reset();
-  hydrateDates();
-  renderAll();
+    if (movement) await insertStockMovement(movement);
+
+    formEl.reset();
+    hydrateDates();
+    renderAll();
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = previousLabel;
+    }
+  }
 }
 
 function requireAdmin() {
@@ -2028,6 +2090,8 @@ async function onCreateProduct(event) {
   const initialStock = Number(form.get("initialStock") || 0);
   const unitCost = Number(form.get("unitCost") || 0);
 
+  const vatRateRaw = form.get("vatRate");
+  const vatRate = vatRateRaw === null || vatRateRaw === "" ? null : Number(vatRateRaw);
   productCatalog.unshift({
     id: productId,
     dbId: crypto.randomUUID(),
@@ -2035,7 +2099,8 @@ async function onCreateProduct(event) {
     price,
     unit: String(form.get("unit") || "un"),
     category: String(form.get("category") || "Agua"),
-    stockControlled
+    stockControlled,
+    vatRate
   });
 
   if (stockControlled) {
@@ -2065,6 +2130,7 @@ async function onCreateClient(event) {
     name: String(form.get("name")),
     phone: String(form.get("phone")),
     address: String(form.get("address")),
+    nif: String(form.get("nif") || "").trim(),
     balance: 0,
     debt: 0
   });
@@ -3605,4 +3671,655 @@ function isUuid(value) {
 
 function formatSupabaseError(error, fallback) {
   return error?.message ? `${fallback} ${error.message}` : fallback;
+}
+
+// =====================================================================
+// AGT (Angola Tax Authority) certification helpers
+// =====================================================================
+
+function getActiveStoreFiscal() {
+  const store = getActiveStore();
+  return store?.fiscal || null;
+}
+
+function isFiscalConfigured() {
+  const f = getActiveStoreFiscal();
+  return !!(f && f.nif && f.legalName && f.address && f.documentSeries);
+}
+
+function getProductVatRate(product) {
+  if (product && product.vatRate != null && product.vatRate !== "" && !Number.isNaN(Number(product.vatRate))) {
+    return Number(product.vatRate);
+  }
+  const f = getActiveStoreFiscal();
+  return f && f.defaultVatRate != null ? Number(f.defaultVatRate) : 14;
+}
+
+async function sha1Base64(text) {
+  const data = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest("SHA-1", data);
+  let s = "";
+  new Uint8Array(buf).forEach((b) => { s += String.fromCharCode(b); });
+  return btoa(s);
+}
+
+function nextDocumentNumber(type, series) {
+  const docs = (state.documents || []).filter((d) => d.type === type && d.series === series);
+  const max = docs.reduce((m, d) => Math.max(m, Number(d.sequence) || 0), 0);
+  return max + 1;
+}
+
+function previousDocumentHash(type) {
+  const year = today.slice(0, 4);
+  const docs = (state.documents || [])
+    .filter((d) => d.type === type && (d.issueDate || "").startsWith(year))
+    .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+  return docs.length ? (docs[docs.length - 1].hashFull || "") : "";
+}
+
+async function buildDocumentHash({ issueDate, systemDateTime, documentNumber, grossTotal, previousHash }) {
+  const payload = `${issueDate};${systemDateTime};${documentNumber};${Number(grossTotal).toFixed(2)};${previousHash}`;
+  const full = await sha1Base64(payload);
+  const c = (i) => full[i] || "*";
+  const compact = `${c(0)}${c(10)}${c(20)}${c(30)}`;
+  return { full, compact, payload };
+}
+
+function buildVatBreakdown(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    const rate = Number(item.vatRate || 0);
+    const acc = map.get(rate) || { rate, base: 0, tax: 0, gross: 0 };
+    acc.base += item.base;
+    acc.tax += item.tax;
+    acc.gross += item.gross;
+    map.set(rate, acc);
+  });
+  return [...map.values()].sort((a, b) => b.rate - a.rate);
+}
+
+async function issueFiscalDocument({ type = "FR", sale }) {
+  const fiscal = getActiveStoreFiscal();
+  if (!fiscal) throw new Error("Configuração fiscal não definida.");
+  if (!fiscal.documentSeries) throw new Error("Série de facturação não definida.");
+
+  const series = fiscal.documentSeries;
+  const sequence = nextDocumentNumber(type, series);
+  const documentNumber = `${type} ${series}/${String(sequence).padStart(4, "0")}`;
+  const issueDate = today;
+  const systemDateTime = new Date().toISOString().slice(0, 19);
+
+  const product = sale ? findProduct(sale.productId) : null;
+  const vatRate = getProductVatRate(product);
+  const qty = Number(sale?.quantity || 1);
+  const gross = Number(sale?.total || 0);
+  const base = vatRate > 0 ? gross / (1 + vatRate / 100) : gross;
+  const tax = gross - base;
+
+  const lines = [{
+    productId: sale?.productId || "ITEM",
+    description: product?.name || sale?.productName || "Produto",
+    quantity: qty,
+    unitPriceGross: qty ? gross / qty : gross,
+    vatRate,
+    base,
+    tax,
+    gross,
+    exemptionReason: vatRate === 0 ? (fiscal.defaultExemptionReason || "M99") : null
+  }];
+  const totals = { netTotal: base, vatTotal: tax, grandTotal: gross };
+
+  const previousHash = previousDocumentHash(type);
+  const { full, compact, payload } = await buildDocumentHash({
+    issueDate,
+    systemDateTime,
+    documentNumber,
+    grossTotal: totals.grandTotal,
+    previousHash
+  });
+
+  const client = sale && sale.clientId ? state.clients.find((c) => c.id === sale.clientId) : null;
+  const document = {
+    id: crypto.randomUUID(),
+    type,
+    series,
+    sequence,
+    documentNumber,
+    issueDate,
+    systemDateTime,
+    fiscalSnapshot: {
+      nif: fiscal.nif,
+      legalName: fiscal.legalName,
+      address: fiscal.address,
+      municipality: fiscal.municipality || "",
+      province: fiscal.province || "",
+      regime: fiscal.fiscalRegime || "GERAL",
+      softwareValidationNumber: fiscal.softwareValidationNumber || ""
+    },
+    client: client ? {
+      id: client.id,
+      name: client.name,
+      nif: (client.nif && client.nif.trim()) || "999999999",
+      address: client.address || "",
+      phone: client.phone || ""
+    } : {
+      id: null,
+      name: sale?.customerName || "Consumidor Final",
+      nif: "999999999",
+      address: "",
+      phone: ""
+    },
+    lines,
+    totals,
+    vatBreakdown: buildVatBreakdown(lines),
+    paymentMethod: sale?.paymentMethod || "Numerário",
+    saleId: sale?.id || null,
+    status: "issued",
+    cancelledAt: null,
+    cancelReason: null,
+    hashFull: full,
+    hashCompact: compact,
+    hashPayload: payload,
+    signature: "",
+    softwareName: SOFTWARE_PRODUCT_NAME,
+    softwareVersion: SOFTWARE_PRODUCT_VERSION
+  };
+
+  if (!Array.isArray(state.documents)) state.documents = [];
+  state.documents.unshift(document);
+  return document;
+}
+
+async function cancelFiscalDocument(id) {
+  if (!requireAdmin()) return;
+  const doc = (state.documents || []).find((d) => d.id === id);
+  if (!doc) return;
+  if (doc.status === "cancelled") {
+    alert("Documento já anulado.");
+    return;
+  }
+  const reason = prompt(`Motivo da anulação do documento ${doc.documentNumber}:`, "");
+  if (reason === null) return;
+  const trimmed = reason.trim();
+  if (!trimmed) {
+    alert("Indique um motivo para anular o documento.");
+    return;
+  }
+  doc.status = "cancelled";
+  doc.cancelledAt = new Date().toISOString();
+  doc.cancelReason = trimmed;
+  await persistMutation({
+    success: `Documento ${doc.documentNumber} anulado.`,
+    fallback: `Documento ${doc.documentNumber} anulado localmente.`
+  });
+  renderInvoicesView();
+}
+
+// ---------------------------------------------------------------------
+// Invoices view rendering & bindings
+// ---------------------------------------------------------------------
+
+function renderInvoicesView() {
+  const tbody = document.getElementById("invoicesTable");
+  if (!tbody) return;
+
+  const summary = document.getElementById("invoiceFiscalSummary");
+  const fiscal = getActiveStoreFiscal();
+  if (summary) {
+    if (!fiscal || !fiscal.nif) {
+      summary.textContent = "⚠ Configure os dados fiscais da loja em Acessos antes de emitir documentos.";
+      summary.style.color = "#b94c00";
+    } else if (!fiscal.softwareValidationNumber) {
+      summary.textContent = `Loja ${fiscal.legalName} (NIF ${fiscal.nif}) — sem nº de validação AGT. Os documentos saem com a indicação "NÃO certificado" até a AGT atribuir o número.`;
+      summary.style.color = "#7d5b00";
+    } else {
+      summary.textContent = `Programa validado nº ${fiscal.softwareValidationNumber}/AGT — ${fiscal.legalName} (NIF ${fiscal.nif}).`;
+      summary.style.color = "#1a6c2b";
+    }
+  }
+
+  const monthInput = document.getElementById("invoiceMonth");
+  if (monthInput && !monthInput.value) {
+    monthInput.value = today.slice(0, 7);
+  }
+
+  const typeFilter = document.getElementById("invoiceFilterType")?.value || "";
+  const statusFilter = document.getElementById("invoiceFilterStatus")?.value || "";
+  const clientFilter = (document.getElementById("invoiceFilterClient")?.value || "").trim().toLowerCase();
+
+  const docs = (state.documents || [])
+    .slice()
+    .sort((a, b) => (b.systemDateTime || "").localeCompare(a.systemDateTime || ""))
+    .filter((d) => !typeFilter || d.type === typeFilter)
+    .filter((d) => !statusFilter || d.status === statusFilter)
+    .filter((d) => {
+      if (!clientFilter) return true;
+      const name = (d.client?.name || "").toLowerCase();
+      const nif = (d.client?.nif || "").toLowerCase();
+      return name.includes(clientFilter) || nif.includes(clientFilter);
+    });
+
+  if (!docs.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-row">Sem documentos emitidos.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = docs.map((d) => `
+    <tr class="${d.status === "cancelled" ? "doc-cancelled" : ""}">
+      <td><strong>${escapeHtml(d.documentNumber)}</strong><br><small>${escapeHtml(DOCUMENT_TYPES[d.type] || d.type)}</small></td>
+      <td>${escapeHtml(formatDateBr(d.issueDate))}<br><small>${escapeHtml((d.systemDateTime || "").slice(11, 16))}</small></td>
+      <td>${escapeHtml(d.client?.name || "Consumidor Final")}<br><small>NIF: ${escapeHtml(d.client?.nif || "999999999")}</small></td>
+      <td>${escapeHtml(currency(d.totals.grandTotal))}</td>
+      <td>${d.status === "cancelled"
+        ? `<span class="badge danger">Anulado</span><br><small>${escapeHtml(d.cancelReason || "")}</small>`
+        : `<span class="badge success">Emitido</span>`}</td>
+      <td class="invoice-actions">
+        <button type="button" class="ghost-button" data-doc-action="pdf" data-id="${escapeAttr(d.id)}">PDF</button>
+        ${d.status !== "cancelled" ? `<button type="button" class="ghost-button danger" data-doc-action="cancel" data-id="${escapeAttr(d.id)}">Anular</button>` : ""}
+      </td>
+    </tr>
+  `).join("");
+}
+
+function bindInvoicesView() {
+  const tbody = document.getElementById("invoicesTable");
+  tbody?.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-doc-action]");
+    if (!button) return;
+    const id = button.dataset.id;
+    const action = button.dataset.docAction;
+    if (action === "pdf") downloadInvoicePdf(id);
+    else if (action === "cancel") cancelFiscalDocument(id);
+  });
+
+  ["invoiceFilterType", "invoiceFilterStatus", "invoiceFilterClient"].forEach((id) => {
+    const el = document.getElementById(id);
+    el?.addEventListener("input", renderInvoicesView);
+    el?.addEventListener("change", renderInvoicesView);
+  });
+
+  document.getElementById("exportSaftButton")?.addEventListener("click", downloadSaft);
+}
+
+// ---------------------------------------------------------------------
+// Fiscal config form
+// ---------------------------------------------------------------------
+
+const DEFAULT_FISCAL_PRESET = {
+  nif: "5002862867",
+  legalName: "CrystalOne",
+  fiscalRegime: "GERAL",
+  defaultVatRate: "14",
+  documentSeries: `A${new Date().getFullYear()}`,
+  defaultDocumentType: "FR"
+};
+
+function renderFiscalConfigForm() {
+  const form = document.getElementById("fiscalConfigForm");
+  if (!form) return;
+  const fiscal = getActiveStoreFiscal() || {};
+  form.querySelectorAll("input, select").forEach((field) => {
+    const name = field.name;
+    if (!name) return;
+    const saved = fiscal[name];
+    if (saved != null && saved !== "") {
+      field.value = String(saved);
+      return;
+    }
+    if (DEFAULT_FISCAL_PRESET[name] != null && (field.value === "" || field.value == null)) {
+      field.value = DEFAULT_FISCAL_PRESET[name];
+    }
+  });
+  const status = document.getElementById("fiscalConfigStatus");
+  if (status) {
+    if (!fiscal.nif) {
+      status.textContent = "Ainda sem configuração fiscal.";
+    } else if (!fiscal.softwareValidationNumber) {
+      status.textContent = `Configurado para NIF ${fiscal.nif} — aguarda nº de validação AGT.`;
+    } else {
+      status.textContent = `Configurado para NIF ${fiscal.nif} — software validado nº ${fiscal.softwareValidationNumber}.`;
+    }
+  }
+}
+
+async function onSaveFiscalConfig(event) {
+  event.preventDefault();
+  if (!requireAdmin()) return;
+  const store = getActiveStore();
+  if (!store) {
+    alert("Nenhuma loja activa.");
+    return;
+  }
+  const form = new FormData(event.currentTarget);
+  store.fiscal = {
+    nif: String(form.get("nif") || "").trim(),
+    legalName: String(form.get("legalName") || "").trim(),
+    address: String(form.get("address") || "").trim(),
+    municipality: String(form.get("municipality") || "").trim(),
+    province: String(form.get("province") || "").trim(),
+    fiscalRegime: String(form.get("fiscalRegime") || "GERAL"),
+    defaultVatRate: Number(form.get("defaultVatRate") || 14),
+    documentSeries: String(form.get("documentSeries") || "").trim().toUpperCase(),
+    defaultDocumentType: String(form.get("defaultDocumentType") || "FR"),
+    softwareValidationNumber: String(form.get("softwareValidationNumber") || "").trim(),
+    defaultExemptionReason: String(form.get("defaultExemptionReason") || ""),
+    updatedAt: new Date().toISOString()
+  };
+  persistStores();
+  renderFiscalConfigForm();
+  renderInvoicesView();
+  const status = document.getElementById("fiscalConfigStatus");
+  if (status) {
+    status.textContent = "Configuração fiscal guardada.";
+    status.style.color = "#1a6c2b";
+  }
+}
+
+// ---------------------------------------------------------------------
+// SAF-T (AO) export
+// ---------------------------------------------------------------------
+
+function buildSaftXml(year, month) {
+  const fiscal = getActiveStoreFiscal();
+  if (!fiscal || !fiscal.nif) {
+    alert("Configure os dados fiscais antes de exportar SAF-T.");
+    return null;
+  }
+  const monthStr = String(month).padStart(2, "0");
+  const periodPrefix = `${year}-${monthStr}`;
+  const docs = (state.documents || []).filter((d) => (d.issueDate || "").startsWith(periodPrefix));
+
+  const customers = new Map();
+  const productsUsed = new Map();
+  const taxTable = new Map();
+  docs.forEach((doc) => {
+    if (doc.client?.id) customers.set(doc.client.id, doc.client);
+    doc.lines.forEach((l) => {
+      if (l.productId) productsUsed.set(l.productId, l);
+      taxTable.set(`IVA-${l.vatRate}`, { code: `IVA${l.vatRate}`, rate: l.vatRate });
+    });
+  });
+
+  const esc = (s) => String(s == null ? "" : s).replace(/[<>&'"]/g, (ch) => ({
+    "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;"
+  }[ch]));
+  const num = (n) => Number(n || 0).toFixed(2);
+  const startDate = `${year}-${monthStr}-01`;
+  const endDate = `${year}-${monthStr}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+  const totalCredit = docs.filter((d) => d.status === "issued").reduce((sum, d) => sum + d.totals.grandTotal, 0);
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<AuditFile xmlns="urn:OECD:StandardAuditFile-Tax:AO_1.01_01">\n`;
+  xml += `  <Header>\n`;
+  xml += `    <AuditFileVersion>1.01_01</AuditFileVersion>\n`;
+  xml += `    <CompanyID>${esc(fiscal.nif)}</CompanyID>\n`;
+  xml += `    <TaxRegistrationNumber>${esc(fiscal.nif)}</TaxRegistrationNumber>\n`;
+  xml += `    <TaxAccountingBasis>F</TaxAccountingBasis>\n`;
+  xml += `    <CompanyName>${esc(fiscal.legalName)}</CompanyName>\n`;
+  xml += `    <CompanyAddress>\n`;
+  xml += `      <AddressDetail>${esc(fiscal.address)}</AddressDetail>\n`;
+  xml += `      <City>${esc(fiscal.municipality || "Luanda")}</City>\n`;
+  xml += `      <Country>AO</Country>\n`;
+  xml += `    </CompanyAddress>\n`;
+  xml += `    <FiscalYear>${year}</FiscalYear>\n`;
+  xml += `    <StartDate>${startDate}</StartDate>\n`;
+  xml += `    <EndDate>${endDate}</EndDate>\n`;
+  xml += `    <CurrencyCode>AOA</CurrencyCode>\n`;
+  xml += `    <DateCreated>${today}</DateCreated>\n`;
+  xml += `    <TaxEntity>Global</TaxEntity>\n`;
+  xml += `    <ProductCompanyTaxID>${esc(fiscal.nif)}</ProductCompanyTaxID>\n`;
+  xml += `    <SoftwareValidationNumber>${esc(fiscal.softwareValidationNumber || "0")}</SoftwareValidationNumber>\n`;
+  xml += `    <ProductID>${esc(SOFTWARE_PRODUCT_NAME)}/${esc(SOFTWARE_PRODUCT_NAME)}</ProductID>\n`;
+  xml += `    <ProductVersion>${esc(SOFTWARE_PRODUCT_VERSION)}</ProductVersion>\n`;
+  xml += `  </Header>\n`;
+
+  const hasFinalCustomer = docs.some((d) => !d.client?.id);
+  xml += `  <MasterFiles>\n`;
+  if (hasFinalCustomer) {
+    xml += `    <Customer>\n`;
+    xml += `      <CustomerID>FINAL</CustomerID>\n`;
+    xml += `      <AccountID>Desconhecido</AccountID>\n`;
+    xml += `      <CustomerTaxID>999999999</CustomerTaxID>\n`;
+    xml += `      <CompanyName>Consumidor Final</CompanyName>\n`;
+    xml += `      <BillingAddress>\n`;
+    xml += `        <AddressDetail>Desconhecido</AddressDetail>\n`;
+    xml += `        <City>Luanda</City>\n`;
+    xml += `        <Country>AO</Country>\n`;
+    xml += `      </BillingAddress>\n`;
+    xml += `      <SelfBillingIndicator>0</SelfBillingIndicator>\n`;
+    xml += `    </Customer>\n`;
+  }
+  customers.forEach((c) => {
+    xml += `    <Customer>\n`;
+    xml += `      <CustomerID>${esc(c.id)}</CustomerID>\n`;
+    xml += `      <AccountID>Desconhecido</AccountID>\n`;
+    xml += `      <CustomerTaxID>${esc(c.nif || "999999999")}</CustomerTaxID>\n`;
+    xml += `      <CompanyName>${esc(c.name)}</CompanyName>\n`;
+    xml += `      <BillingAddress>\n`;
+    xml += `        <AddressDetail>${esc(c.address || "Desconhecido")}</AddressDetail>\n`;
+    xml += `        <City>Luanda</City>\n`;
+    xml += `        <Country>AO</Country>\n`;
+    xml += `      </BillingAddress>\n`;
+    xml += `      <SelfBillingIndicator>0</SelfBillingIndicator>\n`;
+    xml += `    </Customer>\n`;
+  });
+  productsUsed.forEach((line, pid) => {
+    const product = findProduct(pid);
+    xml += `    <Product>\n`;
+    xml += `      <ProductType>P</ProductType>\n`;
+    xml += `      <ProductCode>${esc(pid)}</ProductCode>\n`;
+    xml += `      <ProductDescription>${esc(line.description || product?.name || "Produto")}</ProductDescription>\n`;
+    xml += `      <ProductNumberCode>${esc(pid)}</ProductNumberCode>\n`;
+    xml += `    </Product>\n`;
+  });
+  xml += `    <TaxTable>\n`;
+  taxTable.forEach((t) => {
+    xml += `      <TaxTableEntry>\n`;
+    xml += `        <TaxType>IVA</TaxType>\n`;
+    xml += `        <TaxCountryRegion>AO</TaxCountryRegion>\n`;
+    xml += `        <TaxCode>${esc(t.code)}</TaxCode>\n`;
+    xml += `        <Description>IVA ${t.rate}%</Description>\n`;
+    xml += `        <TaxPercentage>${num(t.rate)}</TaxPercentage>\n`;
+    xml += `      </TaxTableEntry>\n`;
+  });
+  xml += `    </TaxTable>\n`;
+  xml += `  </MasterFiles>\n`;
+
+  xml += `  <SourceDocuments>\n`;
+  xml += `    <SalesInvoices>\n`;
+  xml += `      <NumberOfEntries>${docs.length}</NumberOfEntries>\n`;
+  xml += `      <TotalDebit>0.00</TotalDebit>\n`;
+  xml += `      <TotalCredit>${num(totalCredit)}</TotalCredit>\n`;
+  docs.forEach((d) => {
+    xml += `      <Invoice>\n`;
+    xml += `        <InvoiceNo>${esc(d.documentNumber)}</InvoiceNo>\n`;
+    xml += `        <DocumentStatus>\n`;
+    xml += `          <InvoiceStatus>${d.status === "cancelled" ? "A" : "N"}</InvoiceStatus>\n`;
+    xml += `          <InvoiceStatusDate>${esc(d.cancelledAt || d.systemDateTime)}</InvoiceStatusDate>\n`;
+    xml += `          <SourceID>${esc(currentUser?.username || "Sistema")}</SourceID>\n`;
+    xml += `          <SourceBilling>P</SourceBilling>\n`;
+    xml += `        </DocumentStatus>\n`;
+    xml += `        <Hash>${esc(d.hashFull)}</Hash>\n`;
+    xml += `        <HashControl>1</HashControl>\n`;
+    xml += `        <Period>${month}</Period>\n`;
+    xml += `        <InvoiceDate>${esc(d.issueDate)}</InvoiceDate>\n`;
+    xml += `        <InvoiceType>${esc(d.type)}</InvoiceType>\n`;
+    xml += `        <SpecialRegimes>\n`;
+    xml += `          <SelfBillingIndicator>0</SelfBillingIndicator>\n`;
+    xml += `          <CashVATSchemeIndicator>0</CashVATSchemeIndicator>\n`;
+    xml += `          <ThirdPartiesBillingIndicator>0</ThirdPartiesBillingIndicator>\n`;
+    xml += `        </SpecialRegimes>\n`;
+    xml += `        <SourceID>${esc(currentUser?.username || "Sistema")}</SourceID>\n`;
+    xml += `        <SystemEntryDate>${esc(d.systemDateTime)}</SystemEntryDate>\n`;
+    xml += `        <CustomerID>${esc(d.client?.id || "FINAL")}</CustomerID>\n`;
+    d.lines.forEach((l, idx) => {
+      const unitPrice = l.quantity ? l.base / l.quantity : l.base;
+      xml += `        <Line>\n`;
+      xml += `          <LineNumber>${idx + 1}</LineNumber>\n`;
+      xml += `          <ProductCode>${esc(l.productId || "ITEM")}</ProductCode>\n`;
+      xml += `          <ProductDescription>${esc(l.description)}</ProductDescription>\n`;
+      xml += `          <Quantity>${num(l.quantity)}</Quantity>\n`;
+      xml += `          <UnitOfMeasure>un</UnitOfMeasure>\n`;
+      xml += `          <UnitPrice>${num(unitPrice)}</UnitPrice>\n`;
+      xml += `          <TaxPointDate>${esc(d.issueDate)}</TaxPointDate>\n`;
+      xml += `          <Description>${esc(l.description)}</Description>\n`;
+      xml += `          <CreditAmount>${num(l.base)}</CreditAmount>\n`;
+      xml += `          <Tax>\n`;
+      xml += `            <TaxType>IVA</TaxType>\n`;
+      xml += `            <TaxCountryRegion>AO</TaxCountryRegion>\n`;
+      xml += `            <TaxCode>IVA${l.vatRate}</TaxCode>\n`;
+      xml += `            <TaxPercentage>${num(l.vatRate)}</TaxPercentage>\n`;
+      xml += `          </Tax>\n`;
+      if (Number(l.vatRate) === 0 && l.exemptionReason) {
+        xml += `          <TaxExemptionReason>${esc(VAT_EXEMPTION_REASONS[l.exemptionReason] || l.exemptionReason)}</TaxExemptionReason>\n`;
+        xml += `          <TaxExemptionCode>${esc(l.exemptionReason)}</TaxExemptionCode>\n`;
+      }
+      xml += `        </Line>\n`;
+    });
+    xml += `        <DocumentTotals>\n`;
+    xml += `          <TaxPayable>${num(d.totals.vatTotal)}</TaxPayable>\n`;
+    xml += `          <NetTotal>${num(d.totals.netTotal)}</NetTotal>\n`;
+    xml += `          <GrossTotal>${num(d.totals.grandTotal)}</GrossTotal>\n`;
+    xml += `        </DocumentTotals>\n`;
+    xml += `      </Invoice>\n`;
+  });
+  xml += `    </SalesInvoices>\n`;
+  xml += `  </SourceDocuments>\n`;
+  xml += `</AuditFile>\n`;
+  return xml;
+}
+
+function downloadSaft() {
+  if (!requireAdmin()) return;
+  const monthInput = document.getElementById("invoiceMonth");
+  const value = monthInput?.value || today.slice(0, 7);
+  const [y, m] = value.split("-").map(Number);
+  if (!y || !m) {
+    alert("Selecione um mês válido.");
+    return;
+  }
+  const xml = buildSaftXml(y, m);
+  if (!xml) return;
+  const fiscal = getActiveStoreFiscal();
+  const blob = new Blob([xml], { type: "application/xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `SAFT-AO-${fiscal.nif}-${y}-${String(m).padStart(2, "0")}.xml`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------------
+// PDF
+// ---------------------------------------------------------------------
+
+function downloadInvoicePdf(id) {
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert("Biblioteca de PDF não carregou. Verifique a ligação.");
+    return;
+  }
+  const doc = (state.documents || []).find((d) => d.id === id);
+  if (!doc) return;
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: "pt", format: "a4" });
+  const margin = 36;
+  let y = margin;
+
+  pdf.setFontSize(14).setFont(undefined, "bold");
+  pdf.text(doc.fiscalSnapshot.legalName || DEFAULT_STORE_NAME, margin, y);
+  y += 16;
+  pdf.setFontSize(9).setFont(undefined, "normal");
+  pdf.text(`NIF: ${doc.fiscalSnapshot.nif}`, margin, y);
+  y += 12;
+  pdf.text(doc.fiscalSnapshot.address || "", margin, y);
+  y += 12;
+  if (doc.fiscalSnapshot.municipality || doc.fiscalSnapshot.province) {
+    pdf.text(`${doc.fiscalSnapshot.municipality || ""}${doc.fiscalSnapshot.province ? " - " + doc.fiscalSnapshot.province : ""}`, margin, y);
+    y += 12;
+  }
+  pdf.text(`Regime: ${FISCAL_REGIMES[doc.fiscalSnapshot.regime] || "Regime Geral"}`, margin, y);
+  y += 18;
+
+  pdf.setFontSize(13).setFont(undefined, "bold");
+  pdf.text(`${DOCUMENT_TYPES[doc.type] || doc.type}  ${doc.documentNumber}`, margin, y);
+  y += 16;
+  pdf.setFontSize(9).setFont(undefined, "normal");
+  pdf.text(`Data: ${formatDateBr(doc.issueDate)}    Hora: ${(doc.systemDateTime || "").slice(11, 19)}`, margin, y);
+  y += 14;
+  if (doc.status === "cancelled") {
+    pdf.setTextColor(180, 0, 0).setFont(undefined, "bold");
+    pdf.text(`** ANULADO ** ${doc.cancelReason || ""}`, margin, y);
+    pdf.setTextColor(0, 0, 0).setFont(undefined, "normal");
+    y += 14;
+  }
+
+  pdf.setFontSize(10).setFont(undefined, "bold");
+  pdf.text("Cliente", margin, y);
+  y += 12;
+  pdf.setFontSize(9).setFont(undefined, "normal");
+  pdf.text(doc.client.name, margin, y);
+  y += 12;
+  pdf.text(`NIF: ${doc.client.nif}`, margin, y);
+  y += 12;
+  if (doc.client.address) { pdf.text(doc.client.address, margin, y); y += 12; }
+
+  if (typeof pdf.autoTable === "function") {
+    pdf.autoTable({
+      startY: y + 6,
+      head: [["Descrição", "Qtd", "Preço Unit.", "IVA %", "Subtotal s/IVA", "IVA", "Total"]],
+      body: doc.lines.map((l) => [
+        l.description,
+        Number(l.quantity).toFixed(0),
+        currency(l.quantity ? l.base / l.quantity : l.base),
+        `${l.vatRate}%`,
+        currency(l.base),
+        currency(l.tax),
+        currency(l.gross)
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [25, 95, 160] }
+    });
+    y = pdf.lastAutoTable.finalY + 14;
+  } else {
+    pdf.text("(Tabela de itens indisponível)", margin, y + 6);
+    y += 24;
+  }
+
+  pdf.setFontSize(10).setFont(undefined, "bold");
+  pdf.text("Resumo do IVA", margin, y);
+  y += 14;
+  pdf.setFontSize(9).setFont(undefined, "normal");
+  doc.vatBreakdown.forEach((v) => {
+    pdf.text(`IVA ${v.rate}% — base ${currency(v.base)} | imposto ${currency(v.tax)}`, margin, y);
+    y += 12;
+  });
+  if (doc.lines.some((l) => Number(l.vatRate) === 0 && l.exemptionReason)) {
+    const reasons = [...new Set(doc.lines.filter((l) => Number(l.vatRate) === 0 && l.exemptionReason).map((l) => l.exemptionReason))];
+    reasons.forEach((code) => {
+      pdf.text(`Motivo isenção ${code}: ${VAT_EXEMPTION_REASONS[code] || ""}`, margin, y);
+      y += 12;
+    });
+  }
+  y += 4;
+  pdf.setFontSize(11).setFont(undefined, "bold");
+  pdf.text(`TOTAL A PAGAR: ${currency(doc.totals.grandTotal)}`, margin, y);
+  y += 14;
+  pdf.setFontSize(9).setFont(undefined, "normal");
+  pdf.text(`Forma de pagamento: ${doc.paymentMethod || "Numerário"}`, margin, y);
+  y += 18;
+
+  pdf.setFontSize(8).setFont(undefined, "italic");
+  pdf.text(`Hash: ${doc.hashCompact}`, margin, y);
+  y += 10;
+  const validation = doc.fiscalSnapshot.softwareValidationNumber
+    ? `Processado por programa validado n.º ${doc.fiscalSnapshot.softwareValidationNumber}/AGT`
+    : "Aguarda número de validação da AGT — documento NÃO certificado.";
+  pdf.text(validation, margin, y);
+  y += 10;
+  pdf.text(`${SOFTWARE_PRODUCT_NAME} v${SOFTWARE_PRODUCT_VERSION}`, margin, y);
+
+  pdf.save(`${doc.documentNumber.replace(/[^A-Za-z0-9]+/g, "_")}.pdf`);
 }
