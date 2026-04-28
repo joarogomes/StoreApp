@@ -396,6 +396,7 @@ async function startSession(user, { silent = false } = {}) {
     bindInteractiveControls();
     bindStoreSwitcher();
     bindAccessManagement();
+    bindPromotions();
     renderSupabaseConfig();
     renderStoreSwitcher();
     renderAccessManagement();
@@ -564,7 +565,8 @@ function emptyState() {
     finance: [],
     waterReadings: [],
     maintenance: [],
-    documents: []
+    documents: [],
+    promotions: []
   };
 }
 
@@ -1118,6 +1120,7 @@ function renderAll() {
   renderInvoicesView();
   renderFiscalConfigForm();
   renderSyncStatus();
+  renderPromotions();
 }
 
 function renderSupabaseConfig() {
@@ -4337,4 +4340,174 @@ function downloadInvoicePdf(id) {
   pdf.text(`${SOFTWARE_PRODUCT_NAME} v${SOFTWARE_PRODUCT_VERSION}`, margin, y);
 
   pdf.save(`${doc.documentNumber.replace(/[^A-Za-z0-9]+/g, "_")}.pdf`);
+}
+
+// ---------------------- PROMOÇÕES ----------------------
+
+const PROMO_SEED_KEY = "promo:workers-week-2026:seeded";
+
+function ensurePromotionsArray() {
+  if (!Array.isArray(state.promotions)) state.promotions = [];
+}
+
+function seedDefaultPromotionIfNeeded() {
+  ensurePromotionsArray();
+  if (localStorage.getItem(PROMO_SEED_KEY) === "done") return;
+  const exists = state.promotions.some((p) => p.id === "promo-workers-week-2026");
+  if (!exists) {
+    state.promotions.push({
+      id: "promo-workers-week-2026",
+      title: "Semana do Trabalhador",
+      description: "Dispensador elétrico — 2999 Kz\nSuporte Completo — 5300 Kz\nKit Suporte Completo + Galão 20L + Enchimento — 9990 Kz",
+      startDate: "2026-04-28",
+      endDate: "2026-05-05",
+      createdAt: new Date().toISOString()
+    });
+    saveState();
+  }
+  localStorage.setItem(PROMO_SEED_KEY, "done");
+}
+
+function bindPromotions() {
+  seedDefaultPromotionIfNeeded();
+  const addBtn = document.getElementById("addPromotionButton");
+  const cancelBtn = document.getElementById("cancelPromotionButton");
+  const form = document.getElementById("promotionForm");
+  addBtn?.addEventListener("click", () => openPromotionForm(null));
+  cancelBtn?.addEventListener("click", closePromotionForm);
+  form?.addEventListener("submit", onSavePromotion);
+}
+
+function openPromotionForm(promo) {
+  const panel = document.getElementById("promotionFormPanel");
+  const title = document.getElementById("promotionFormTitle");
+  if (!panel) return;
+  panel.hidden = false;
+  document.getElementById("promotionId").value = promo?.id || "";
+  document.getElementById("promotionTitle").value = promo?.title || "";
+  document.getElementById("promotionDescription").value = promo?.description || "";
+  document.getElementById("promotionStartDate").value = promo?.startDate || todayISO();
+  document.getElementById("promotionEndDate").value = promo?.endDate || todayISO();
+  title.textContent = promo ? "Editar promoção" : "Nova promoção";
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closePromotionForm() {
+  const panel = document.getElementById("promotionFormPanel");
+  if (panel) panel.hidden = true;
+  const form = document.getElementById("promotionForm");
+  form?.reset();
+}
+
+function onSavePromotion(event) {
+  event.preventDefault();
+  ensurePromotionsArray();
+  const id = document.getElementById("promotionId").value;
+  const title = document.getElementById("promotionTitle").value.trim();
+  const description = document.getElementById("promotionDescription").value.trim();
+  const startDate = document.getElementById("promotionStartDate").value;
+  const endDate = document.getElementById("promotionEndDate").value;
+  if (!title || !description || !startDate || !endDate) return;
+  if (endDate < startDate) {
+    alert("A data de fim não pode ser anterior à data de início.");
+    return;
+  }
+  if (id) {
+    const idx = state.promotions.findIndex((p) => p.id === id);
+    if (idx >= 0) {
+      state.promotions[idx] = { ...state.promotions[idx], title, description, startDate, endDate };
+    }
+  } else {
+    state.promotions.unshift({
+      id: crypto.randomUUID(),
+      title,
+      description,
+      startDate,
+      endDate,
+      createdAt: new Date().toISOString()
+    });
+  }
+  saveState();
+  closePromotionForm();
+  renderPromotions();
+}
+
+function deletePromotion(id) {
+  if (!confirm("Eliminar esta promoção?")) return;
+  state.promotions = (state.promotions || []).filter((p) => p.id !== id);
+  saveState();
+  renderPromotions();
+}
+
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function daysBetween(fromISO, toISO) {
+  const a = new Date(`${fromISO}T00:00:00`);
+  const b = new Date(`${toISO}T00:00:00`);
+  return Math.round((b - a) / 86400000);
+}
+
+function formatDatePT(iso) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function renderPromotions() {
+  const list = document.getElementById("promotionsList");
+  const emptyHint = document.getElementById("promoEmptyHint");
+  if (!list) return;
+  ensurePromotionsArray();
+  const promos = [...state.promotions].sort((a, b) => (a.endDate || "").localeCompare(b.endDate || ""));
+  list.innerHTML = "";
+  if (!promos.length) {
+    if (emptyHint) emptyHint.hidden = false;
+    return;
+  }
+  if (emptyHint) emptyHint.hidden = true;
+  const today = todayISO();
+  for (const promo of promos) {
+    const card = document.createElement("article");
+    const daysLeft = daysBetween(today, promo.endDate);
+    const started = today >= promo.startDate;
+    const expired = daysLeft < 0;
+    let statusClass = "promo-card";
+    let badge = "";
+    if (expired) {
+      statusClass += " promo-expired";
+      badge = `<span class="promo-badge promo-badge-expired">Encerrada</span>`;
+    } else if (!started) {
+      const daysToStart = daysBetween(today, promo.startDate);
+      statusClass += " promo-upcoming";
+      badge = `<span class="promo-badge promo-badge-upcoming">Começa em ${daysToStart} dia${daysToStart === 1 ? "" : "s"}</span>`;
+    } else {
+      const blink = daysLeft <= 3 ? " promo-badge-blink" : "";
+      const label = daysLeft === 0 ? "Termina hoje" : `Faltam ${daysLeft} dia${daysLeft === 1 ? "" : "s"}`;
+      badge = `<span class="promo-badge promo-badge-active${blink}">${label}</span>`;
+    }
+    const items = promo.description.split("\n").map((line) => line.trim()).filter(Boolean);
+    const itemsHtml = items.map((line) => `<li>${escapeHtml(line)}</li>`).join("");
+    card.className = statusClass;
+    card.innerHTML = `
+      <header class="promo-card-header">
+        <h4>${escapeHtml(promo.title)}</h4>
+        ${badge}
+      </header>
+      <ul class="promo-items">${itemsHtml}</ul>
+      <footer class="promo-card-footer">
+        <span class="promo-dates">📅 ${formatDatePT(promo.startDate)} — ${formatDatePT(promo.endDate)}</span>
+        <div class="promo-card-actions role-admin-only">
+          <button type="button" class="ghost-button promo-edit">Editar</button>
+          <button type="button" class="ghost-button promo-delete">Remover</button>
+        </div>
+      </footer>
+    `;
+    card.querySelector(".promo-edit")?.addEventListener("click", () => openPromotionForm(promo));
+    card.querySelector(".promo-delete")?.addEventListener("click", () => deletePromotion(promo.id));
+    list.appendChild(card);
+  }
+  applyRolePermissions();
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = "agua-cristalina-cache-v3";
+const CACHE_NAME = "agua-cristalina-cache-v4";
 const PRECACHE_ASSETS = [
   "./manifest.webmanifest",
   "./assets/logo.png",

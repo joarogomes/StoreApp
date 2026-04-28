@@ -88,6 +88,7 @@
         <button class="nav-tab role-admin-only" data-view="estoque">Estoque</button>
         <button class="nav-tab role-admin-only" data-view="financas">Finanças</button>
         <button class="nav-tab" data-view="agua">Água</button>
+        <button class="nav-tab" data-view="promocoes">Promoção</button>
         <button class="nav-tab" data-view="sincronizar">Sincronizar</button>
         <button class="nav-tab role-admin-only" data-view="facturacao">Facturação</button>
         <button class="nav-tab role-admin-only" data-view="relatorios">Relatórios</button>
@@ -661,6 +662,52 @@
           </section>
         </div>
 
+      </section>
+
+      <section class="view" id="promocoes">
+        <section class="panel promo-panel">
+          <div class="panel-header">
+            <div>
+              <p class="card-label promo-label">Campanhas activas</p>
+              <h3>Promoções da CrystalOne</h3>
+            </div>
+            <button type="button" class="primary-button promo-add-button role-admin-only" id="addPromotionButton">+ Nova promoção</button>
+          </div>
+          <p class="helper-note" id="promoEmptyHint" hidden>Sem promoções activas. Crie a primeira para destacar ofertas aos clientes.</p>
+          <div id="promotionsList" class="promo-grid"></div>
+        </section>
+
+        <section class="panel promo-form-panel role-admin-only" id="promotionFormPanel" hidden>
+          <div class="panel-header">
+            <div>
+              <p class="card-label promo-label">Editor</p>
+              <h3 id="promotionFormTitle">Nova promoção</h3>
+            </div>
+            <button type="button" class="ghost-button" id="cancelPromotionButton">Cancelar</button>
+          </div>
+          <form id="promotionForm" class="promo-form">
+            <input type="hidden" name="id" id="promotionId">
+            <label class="full-width">
+              Título
+              <input type="text" name="title" id="promotionTitle" required placeholder="Ex.: Semana do Trabalhador">
+            </label>
+            <label class="full-width">
+              Descrição (use uma linha por item)
+              <textarea name="description" id="promotionDescription" rows="4" placeholder="Dispensador elétrico — 2999 Kz&#10;Suporte Completo — 5300 Kz" required></textarea>
+            </label>
+            <label>
+              Início
+              <input type="date" name="startDate" id="promotionStartDate" required>
+            </label>
+            <label>
+              Fim
+              <input type="date" name="endDate" id="promotionEndDate" required>
+            </label>
+            <div class="actions-row full-width">
+              <button type="submit" class="primary-button">Guardar promoção</button>
+            </div>
+          </form>
+        </section>
       </section>
 
       <section class="view" id="sincronizar">
