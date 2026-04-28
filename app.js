@@ -1589,10 +1589,11 @@ function renderSalesTable() {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${sale.date}</td>
-        <td>${findClient(sale.clientId)?.name || sale.customerName || "-"}</td>
-        <td>${findProduct(sale.productId)?.name || sale.productName || "-"}</td>
+        <td>${escapeHtml(findClient(sale.clientId)?.name || sale.customerName || "-")}</td>
+        <td>${escapeHtml(findProduct(sale.productId)?.name || sale.productName || "-")}</td>
         <td>${translateEntryType(sale.entryType)}</td>
-        <td>${sale.paymentMethod}</td>
+        <td>${escapeHtml(sale.paymentMethod)}</td>
+        <td>${escapeHtml(sale.sellerUsername || "-")}</td>
         <td>${currency(sale.total)}</td>
       `;
       tbody.appendChild(tr);
@@ -2036,7 +2037,9 @@ async function onCreateSale(event) {
       entryType,
       date,
       total,
-      costTotal
+      costTotal,
+      sellerUsername: currentUser?.username || "",
+      sellerRole: currentRole || ""
     };
     state.sales.unshift(saleRecord);
 
@@ -2477,7 +2480,9 @@ function normalizeSaleRow(row) {
     entryType: row.entry_type ?? "sale",
     date: normalizeDate(row.sale_date ?? row.created_at ?? today),
     total: toNumber(row.total ?? 0),
-    costTotal: toNumber(row.cost_total ?? 0)
+    costTotal: toNumber(row.cost_total ?? 0),
+    sellerUsername: row.seller_username ?? "",
+    sellerRole: row.seller_role ?? ""
   };
 }
 
