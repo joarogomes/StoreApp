@@ -4405,14 +4405,17 @@ function seedDefaultPromotionIfNeeded() {
     };
     saveState();
   }
-  // Pre-create promo SKUs and seed initial stock so the user can sell immediately.
-  if (promo && seeded !== "done-v2") {
+  // Pre-create / migrate promo SKUs and seed initial stock so the user can sell immediately.
+  // Idempotent: also renames legacy duplicates from older versions.
+  if (promo) {
     const lines = promo.description.split("\n").map((s) => s.trim()).filter(Boolean);
     for (const line of lines) {
       const parsed = parsePromoLine(line);
       if (parsed) ensurePromoProductInCatalog(promo, parsed);
     }
-    localStorage.setItem(PROMO_SEED_KEY, "done-v2");
+    if (seeded !== "done-v3") {
+      localStorage.setItem(PROMO_SEED_KEY, "done-v3");
+    }
   }
 }
 
@@ -4596,11 +4599,12 @@ function promoProductId(promoId, name) {
 
 function ensurePromoComponentProduct(promo, componentName) {
   const id = promoProductId(promo.id, `comp-${componentName}`);
+  const desiredName = `${componentName} · componente (${promo.title})`;
   let product = productCatalog.find((p) => p.id === id);
   if (!product) {
     product = {
       id,
-      name: `${componentName} (${promo.title})`,
+      name: desiredName,
       price: 0,
       stockControlled: true,
       unit: "un",
@@ -4610,6 +4614,8 @@ function ensurePromoComponentProduct(promo, componentName) {
       promoId: promo.id
     };
     productCatalog.unshift(product);
+  } else if (product.name !== desiredName) {
+    product.name = desiredName;
   }
   ensurePromoStockEntry(product);
   return product;
