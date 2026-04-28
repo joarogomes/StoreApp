@@ -1989,8 +1989,25 @@ async function onCreateSale(event) {
 
   let costTotal = 0;
   let movement = null;
-  // Stock movement also applies when client takes goods on credit (debt)
-  if (product.stockControlled && (entryType === "sale" || entryType === "debt")) {
+  const components = Array.isArray(product.components) ? product.components : null;
+  const consumesStock = entryType === "sale" || entryType === "debt";
+  // Composite product (kit/pacote): decrement each component's stock instead of the kit itself.
+  if (components && components.length && consumesStock) {
+    for (const comp of components) {
+      const compStock = findStockByProduct(comp.productId);
+      const needed = (Number(comp.qty) || 1) * quantity;
+      if (!compStock || compStock.quantity < needed) {
+        return alert(`Estoque insuficiente para o componente "${comp.name || comp.productId}" do kit. Verifique a aba Estoque.`);
+      }
+    }
+    for (const comp of components) {
+      const compStock = findStockByProduct(comp.productId);
+      const needed = (Number(comp.qty) || 1) * quantity;
+      compStock.quantity -= needed;
+      costTotal += (compStock.unitCost || 0) * needed;
+    }
+    movement = { itemId: null, productId, quantity, type: "out", composite: true };
+  } else if (product.stockControlled && consumesStock) {
     const stockItem = findStockByProduct(productId);
     if (!stockItem || stockItem.quantity < quantity) {
       return alert("Estoque insuficiente para este produto.");
@@ -4350,22 +4367,53 @@ function ensurePromotionsArray() {
   if (!Array.isArray(state.promotions)) state.promotions = [];
 }
 
+const PROMO_DEFAULT_INITIAL_STOCK = 10;
+
 function seedDefaultPromotionIfNeeded() {
   ensurePromotionsArray();
-  if (localStorage.getItem(PROMO_SEED_KEY) === "done") return;
-  const exists = state.promotions.some((p) => p.id === "promo-workers-week-2026");
-  if (!exists) {
-    state.promotions.push({
+  const seeded = localStorage.getItem(PROMO_SEED_KEY);
+  let promo = state.promotions.find((p) => p.id === "promo-workers-week-2026");
+  if (!promo && seeded !== "done-v2") {
+    promo = {
       id: "promo-workers-week-2026",
       title: "Semana do Trabalhador",
       description: "Dispensador elétrico — 2999 Kz\nSuporte Completo — 5300 Kz\nKit Suporte Completo + Galão 20L + Enchimento — 9990 Kz",
       startDate: "2026-04-28",
       endDate: "2026-05-05",
-      createdAt: new Date().toISOString()
-    });
+      createdAt: new Date().toISOString(),
+      itemMeta: {
+        "Kit Suporte Completo + Galão 20L + Enchimento": {
+          components: [
+            { name: "Suporte Completo", qty: 1 },
+            { name: "Galão 20L", qty: 1 },
+            { name: "Enchimento 20L", qty: 1 }
+          ]
+        }
+      }
+    };
+    state.promotions.push(promo);
+    saveState();
+  } else if (promo && !promo.itemMeta) {
+    promo.itemMeta = {
+      "Kit Suporte Completo + Galão 20L + Enchimento": {
+        components: [
+          { name: "Suporte Completo", qty: 1 },
+          { name: "Galão 20L", qty: 1 },
+          { name: "Enchimento 20L", qty: 1 }
+        ]
+      }
+    };
     saveState();
   }
-  localStorage.setItem(PROMO_SEED_KEY, "done");
+  // Pre-create promo SKUs and seed initial stock so the user can sell immediately.
+  if (promo && seeded !== "done-v2") {
+    const lines = promo.description.split("\n").map((s) => s.trim()).filter(Boolean);
+    for (const line of lines) {
+      const parsed = parsePromoLine(line);
+      if (parsed) ensurePromoProductInCatalog(promo, parsed);
+    }
+    localStorage.setItem(PROMO_SEED_KEY, "done-v2");
+  }
 }
 
 function bindPromotions() {
@@ -4546,24 +4594,88 @@ function promoProductId(promoId, name) {
   return `promo-${promoId}-${slug}`.slice(0, 80);
 }
 
+function ensurePromoComponentProduct(promo, componentName) {
+  const id = promoProductId(promo.id, `comp-${componentName}`);
+  let product = productCatalog.find((p) => p.id === id);
+  if (!product) {
+    product = {
+      id,
+      name: `${componentName} (${promo.title})`,
+      price: 0,
+      stockControlled: true,
+      unit: "un",
+      vatRate: 14,
+      isPromotional: true,
+      isComponent: true,
+      promoId: promo.id
+    };
+    productCatalog.unshift(product);
+  }
+  ensurePromoStockEntry(product);
+  return product;
+}
+
+function ensurePromoStockEntry(product) {
+  const existing = state.stock.find((item) => String(item.productId) === String(product.id));
+  if (existing) return existing;
+  const entry = {
+    id: crypto.randomUUID(),
+    productId: product.id,
+    quantity: PROMO_DEFAULT_INITIAL_STOCK,
+    unitCost: 0,
+    minStock: 2,
+    isPromotional: true
+  };
+  state.stock.unshift(entry);
+  return entry;
+}
+
 function ensurePromoProductInCatalog(promo, parsed) {
   const id = promoProductId(promo.id, parsed.name);
   let product = productCatalog.find((p) => p.id === id);
+  const meta = (promo.itemMeta && promo.itemMeta[parsed.name]) || null;
+  const componentDefs = meta && Array.isArray(meta.components) ? meta.components : null;
+  const isComposite = !!(componentDefs && componentDefs.length);
+
+  let components = null;
+  if (isComposite) {
+    components = componentDefs.map((c) => {
+      const compProduct = ensurePromoComponentProduct(promo, c.name);
+      return { productId: compProduct.id, name: c.name, qty: Number(c.qty) || 1 };
+    });
+  }
+
   if (!product) {
     product = {
       id,
       name: `${parsed.name} (${promo.title})`,
       price: parsed.price,
-      stockControlled: true,
+      stockControlled: !isComposite,
       unit: "un",
       vatRate: 14,
       isPromotional: true,
-      promoId: promo.id
+      promoId: promo.id,
+      components: components || undefined
     };
     productCatalog.unshift(product);
     saveState();
-  } else if (product.price !== parsed.price) {
-    product.price = parsed.price;
+  } else {
+    let dirty = false;
+    if (product.price !== parsed.price) { product.price = parsed.price; dirty = true; }
+    if (isComposite) {
+      if (product.stockControlled) { product.stockControlled = false; dirty = true; }
+      if (JSON.stringify(product.components || []) !== JSON.stringify(components)) {
+        product.components = components;
+        dirty = true;
+      }
+    }
+    if (dirty) saveState();
+  }
+
+  if (!isComposite) {
+    ensurePromoStockEntry(product);
+    saveState();
+  } else {
     saveState();
   }
   return product;

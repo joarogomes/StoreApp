@@ -80,3 +80,18 @@ Configured as a static site deployment (publicDir: ".").
 - `startPromoSale(promo, line)` salta para a aba **Vendas**, pré-selecciona o produto promocional, faz `renderSelects/renderStock/renderSalePreview` e avisa se ainda não há stock registado para esse SKU.
 - Stock cai automaticamente na confirmação porque o produto tem `stockControlled:true` (caminho normal de `onCreateSale`). Admin tem de adicionar uma vez o stock dos SKUs promocionais na aba Estoque.
 - Service-worker bumped to v5.
+
+### Promoção — kits compostos + auto-stock (added 2026-04-28)
+- **Auto-seed de produtos & stock**: `seedDefaultPromotionIfNeeded` (chave `promo:workers-week-2026:seeded` → `done-v2`) cria automaticamente os produtos promocionais no catálogo e regista uma entrada inicial em `state.stock` com `PROMO_DEFAULT_INITIAL_STOCK = 10` unidades para cada SKU. Idempotente: re-executa quando promo existe sem `itemMeta` (migração de utilizadores que estavam em v1 do seed).
+- **Componentes de kits (produto-pacote)**:
+  - O seed da Semana do Trabalhador inclui `promo.itemMeta["Kit Suporte Completo + Galão 20L + Enchimento"].components = [Suporte Completo×1, Galão 20L×1, Enchimento 20L×1]`.
+  - `ensurePromoComponentProduct(promo, name)` cria SKUs de componentes com `price:0`, `stockControlled:true`, `isComponent:true` e respectiva entrada de stock inicial (10 un).
+  - `ensurePromoProductInCatalog`: quando o item tem componentes (`itemMeta`), o produto-kit fica `stockControlled:false` e ganha `components: [{productId, name, qty}]`. Quando não tem, fica `stockControlled:true` com a sua própria entrada de stock.
+- **Decomposição na venda**: `onCreateSale` valida primeiro se o produto tem `components[]`. Se sim, percorre cada componente e:
+  1. Verifica se existe stock suficiente (qty × quantidade vendida).
+  2. Decrementa o stock de cada componente.
+  3. Soma `unitCost × needed` ao `costTotal` da venda.
+  4. Não decrementa o produto-kit em si (porque tem `stockControlled:false`).
+  Se algum componente não tiver stock suficiente, a venda é abortada antes de qualquer escrita.
+- **Compatibilidade**: produtos sem `components` continuam a usar o fluxo original (decremento directo do próprio SKU).
+- Service-worker bumped to v6.
