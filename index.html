@@ -683,7 +683,7 @@
                 <input type="password" name="anonKey" id="supabaseAnonKey" placeholder="Cole aqui a anon public key">
               </label>
               <div class="actions-row full-width">
-                <button class="primary-button" type="submit">Guardar e conectar</button>
+                <button class="primary-button role-admin-only" type="submit">Guardar e conectar</button>
                 <button class="ghost-button role-admin-only" type="button" id="pullSupabaseData">Puxar dados do Supabase</button>
                 <button class="ghost-button" type="button" id="pushSupabaseData">Enviar dados locais</button>
               </div>
@@ -695,7 +695,7 @@
                 <strong>Status da integracao</strong>
                 <small id="supabaseStatusText">Sem configuracao. O app continua funcional com dados locais.</small>
               </div>
-              <div class="mini-card compact-note">
+              <div class="mini-card compact-note role-admin-only">
                 <strong>Fluxo</strong>
                 <small>Conectar, puxar dados e depois trabalhar normalmente.</small>
               </div>
