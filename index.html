@@ -88,6 +88,7 @@
         <button class="nav-tab role-admin-only" data-view="estoque">Estoque</button>
         <button class="nav-tab role-admin-only" data-view="financas">Finanças</button>
         <button class="nav-tab" data-view="agua">Água</button>
+        <button class="nav-tab" data-view="sincronizar">Sincronizar</button>
         <button class="nav-tab role-admin-only" data-view="facturacao">Facturação</button>
         <button class="nav-tab role-admin-only" data-view="relatorios">Relatórios</button>
         <button class="nav-tab role-admin-only" data-view="acessos">Acessos</button>
@@ -659,11 +660,15 @@
           </section>
         </div>
 
+      </section>
+
+      <section class="view" id="sincronizar">
         <section class="panel">
           <div class="panel-header">
             <div>
               <p class="card-label">Supabase</p>
               <h3>Conexao e sincronizacao</h3>
+              <p class="helper-note">Guarde a configuracao para ligar esta loja a base de dados online e enviar os movimentos guardados localmente.</p>
             </div>
           </div>
           <div class="integration-grid integration-grid-compact">
@@ -678,7 +683,7 @@
               </label>
               <div class="actions-row full-width">
                 <button class="primary-button" type="submit">Guardar e conectar</button>
-                <button class="ghost-button" type="button" id="pullSupabaseData">Puxar dados do Supabase</button>
+                <button class="ghost-button role-admin-only" type="button" id="pullSupabaseData">Puxar dados do Supabase</button>
                 <button class="ghost-button" type="button" id="pushSupabaseData">Enviar dados locais</button>
               </div>
 

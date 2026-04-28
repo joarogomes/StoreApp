@@ -2264,8 +2264,18 @@ async function onSaveSupabaseConfig(event) {
   };
 
   saveSupabaseConfig();
-  const connected = await initializeSupabaseSession({ autoPull: true, silent: false });
-  if (connected) renderAll();
+  const isOperacao = currentRole === "operacao";
+  const connected = await initializeSupabaseSession({ autoPull: !isOperacao, silent: false });
+  if (connected) {
+    if (isOperacao) {
+      try {
+        await syncToSupabase();
+      } catch (error) {
+        console.warn("Falha ao enviar dados locais apos conectar (operacao):", error);
+      }
+    }
+    renderAll();
+  }
 }
 
 async function initializeSupabaseSession({ autoPull = false, silent = false } = {}) {
