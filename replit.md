@@ -72,3 +72,11 @@ Configured as a static site deployment (publicDir: ".").
 - **UX**: green theme (`#16a34a`), card grid, badges per status: **active** (green pill, with countdown), **upcoming** (cyan), **expired** (grey). When `daysLeft ≤ 3` the active badge gets `.promo-badge-blink` (1s opacity+ring keyframes `promoBlink`).
 - **Editor** (admin-only via `role-admin-only` on the form panel and the **+ Nova promoção** button + Editar/Remover actions): create/update/delete promotions with title, multi-line description, start/end dates. Operadores só visualizam.
 - **Files**: `index.html` view + form, `app.js` end-of-file block (`bindPromotions`, `renderPromotions`, `onSavePromotion`, `deletePromotion`, helpers `todayISO`/`daysBetween`/`formatDatePT`), `styles.css` `.promo-*` classes. Service-worker bumped to v4.
+
+### Promoção — botão "Vender" por item (added 2026-04-28)
+- Cada linha da descrição da promoção (formato `Nome — Preço Kz`) ganha um botão verde **"Vender"** quando a promoção está activa (entre startDate e endDate).
+- `parsePromoLine(line)` extrai `{name, price}` (suporta separadores `—`, `–`, `-`; preço com pontos/vírgulas; sufixo `Kz/AOA` opcional).
+- `ensurePromoProductInCatalog(promo, parsed)` cria (uma vez) um produto no `productCatalog` com id determinístico `promo-<promoId>-<slug>`, nome `"<Nome> (<Título da promoção>)"`, `price = parsed.price`, `stockControlled: true`, `vatRate: 14`, `isPromotional: true`, `promoId`. Se já existir mas o preço mudou, actualiza. Persiste via `saveState()`.
+- `startPromoSale(promo, line)` salta para a aba **Vendas**, pré-selecciona o produto promocional, faz `renderSelects/renderStock/renderSalePreview` e avisa se ainda não há stock registado para esse SKU.
+- Stock cai automaticamente na confirmação porque o produto tem `stockControlled:true` (caminho normal de `onCreateSale`). Admin tem de adicionar uma vez o stock dos SKUs promocionais na aba Estoque.
+- Service-worker bumped to v5.

@@ -1737,3 +1737,34 @@ body.menu-open .app-header {
 .promo-form-panel {
   border-left: 6px solid #16a34a;
 }
+
+.promo-items li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.promo-item-text {
+  flex: 1;
+}
+.promo-sell-btn {
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, transform 0.1s ease;
+  box-shadow: 0 1px 3px rgba(22, 163, 74, 0.3);
+}
+.promo-sell-btn:hover {
+  background: #15803d;
+  transform: translateY(-1px);
+}
+.promo-sell-btn:active {
+  transform: translateY(0);
+}
+.promo-expired .promo-sell-btn { display: none; }

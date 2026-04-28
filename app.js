@@ -4489,7 +4489,14 @@ function renderPromotions() {
       badge = `<span class="promo-badge promo-badge-active${blink}">${label}</span>`;
     }
     const items = promo.description.split("\n").map((line) => line.trim()).filter(Boolean);
-    const itemsHtml = items.map((line) => `<li>${escapeHtml(line)}</li>`).join("");
+    const sellable = started && !expired;
+    const itemsHtml = items.map((line, idx) => {
+      const parsed = parsePromoLine(line);
+      const sellBtn = parsed && sellable
+        ? `<button type="button" class="promo-sell-btn" data-idx="${idx}">Vender</button>`
+        : "";
+      return `<li><span class="promo-item-text">${escapeHtml(line)}</span>${sellBtn}</li>`;
+    }).join("");
     card.className = statusClass;
     card.innerHTML = `
       <header class="promo-card-header">
@@ -4507,7 +4514,85 @@ function renderPromotions() {
     `;
     card.querySelector(".promo-edit")?.addEventListener("click", () => openPromotionForm(promo));
     card.querySelector(".promo-delete")?.addEventListener("click", () => deletePromotion(promo.id));
+    card.querySelectorAll(".promo-sell-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.dataset.idx);
+        startPromoSale(promo, items[idx]);
+      });
+    });
     list.appendChild(card);
   }
   applyRolePermissions();
+}
+
+function parsePromoLine(line) {
+  if (!line) return null;
+  const match = line.match(/^(.+?)\s*[—–\-]\s*([\d\s.,]+)\s*(Kz|kz|AOA)?\s*$/);
+  if (!match) return null;
+  const name = match[1].trim();
+  const raw = match[2].replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+  const price = Number(raw);
+  if (!name || !Number.isFinite(price) || price <= 0) return null;
+  return { name, price };
+}
+
+function promoProductId(promoId, name) {
+  const slug = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return `promo-${promoId}-${slug}`.slice(0, 80);
+}
+
+function ensurePromoProductInCatalog(promo, parsed) {
+  const id = promoProductId(promo.id, parsed.name);
+  let product = productCatalog.find((p) => p.id === id);
+  if (!product) {
+    product = {
+      id,
+      name: `${parsed.name} (${promo.title})`,
+      price: parsed.price,
+      stockControlled: true,
+      unit: "un",
+      vatRate: 14,
+      isPromotional: true,
+      promoId: promo.id
+    };
+    productCatalog.unshift(product);
+    saveState();
+  } else if (product.price !== parsed.price) {
+    product.price = parsed.price;
+    saveState();
+  }
+  return product;
+}
+
+function startPromoSale(promo, line) {
+  const parsed = parsePromoLine(line);
+  if (!parsed) {
+    alert("Não consegui interpretar este item da promoção. Use o formato \"Nome — Preço Kz\".");
+    return;
+  }
+  const product = ensurePromoProductInCatalog(promo, parsed);
+  renderSelects();
+  renderStock();
+  const vendasTab = document.querySelector(".nav-tab[data-view='vendas']");
+  vendasTab?.click();
+  const saleProductSelect = document.getElementById("saleProduct");
+  if (saleProductSelect) {
+    saleProductSelect.value = product.id;
+    saleProductSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  const qty = document.getElementById("saleQuantity");
+  if (qty) qty.value = "1";
+  renderSalePreview();
+  document.getElementById("saleForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const stockItem = (typeof findStockByProduct === "function") ? findStockByProduct(product.id) : null;
+  if (!stockItem || stockItem.quantity <= 0) {
+    setTimeout(() => {
+      alert(`O produto "${product.name}" ainda não tem stock registado.\n\nVá à aba Estoque (administrador) e adicione a quantidade disponível antes de finalizar a venda.`);
+    }, 350);
+  }
 }
