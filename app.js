@@ -541,7 +541,7 @@ function loadState() {
       return emptyState();
     }
   }
-  return storeId === DEFAULT_STORE_ID ? structuredClone(demoData) : emptyState();
+  return storeId === DEFAULT_STORE_ID ? normalizeState(structuredClone(demoData)) : emptyState();
 }
 
 function saveState() {
@@ -4420,13 +4420,21 @@ function seedDefaultPromotionIfNeeded() {
 }
 
 function bindPromotions() {
-  seedDefaultPromotionIfNeeded();
   const addBtn = document.getElementById("addPromotionButton");
   const cancelBtn = document.getElementById("cancelPromotionButton");
   const form = document.getElementById("promotionForm");
-  addBtn?.addEventListener("click", () => openPromotionForm(null));
+  addBtn?.addEventListener("click", () => {
+    try { openPromotionForm(null); }
+    catch (err) { console.error("openPromotionForm failed", err); alert("Não consegui abrir o formulário: " + err.message); }
+  });
   cancelBtn?.addEventListener("click", closePromotionForm);
-  form?.addEventListener("submit", onSavePromotion);
+  form?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    try { onSavePromotion(event); }
+    catch (err) { console.error("onSavePromotion failed", err); alert("Erro ao guardar promoção: " + err.message); }
+  });
+  try { seedDefaultPromotionIfNeeded(); }
+  catch (err) { console.error("seedDefaultPromotionIfNeeded failed", err); }
 }
 
 function openPromotionForm(promo) {
@@ -4458,7 +4466,10 @@ function onSavePromotion(event) {
   const description = document.getElementById("promotionDescription").value.trim();
   const startDate = document.getElementById("promotionStartDate").value;
   const endDate = document.getElementById("promotionEndDate").value;
-  if (!title || !description || !startDate || !endDate) return;
+  if (!title || !description || !startDate || !endDate) {
+    alert("Preencha todos os campos: título, descrição, data de início e data de fim.");
+    return;
+  }
   if (endDate < startDate) {
     alert("A data de fim não pode ser anterior à data de início.");
     return;
