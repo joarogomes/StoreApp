@@ -4408,9 +4408,8 @@ const PROMO_DEFAULT_INITIAL_STOCK = 10;
 
 function seedDefaultPromotionIfNeeded() {
   ensurePromotionsArray();
-  const seeded = localStorage.getItem(PROMO_SEED_KEY);
   let promo = state.promotions.find((p) => p.id === "promo-workers-week-2026");
-  if (!promo && seeded !== "done-v2") {
+  if (!promo) {
     promo = {
       id: "promo-workers-week-2026",
       title: "Semana do Trabalhador",
@@ -4450,9 +4449,7 @@ function seedDefaultPromotionIfNeeded() {
       const parsed = parsePromoLine(line);
       if (parsed) ensurePromoProductInCatalog(promo, parsed);
     }
-    if (seeded !== "done-v3") {
-      localStorage.setItem(PROMO_SEED_KEY, "done-v3");
-    }
+    localStorage.setItem(PROMO_SEED_KEY, "done-v3");
   }
 }
 
