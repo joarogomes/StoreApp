@@ -2409,6 +2409,7 @@ async function syncToSupabase() {
     setSyncStatus("warning", "A enviar dados locais para o Supabase...");
 
     ensureEntityIds();
+    await reconcileProductIdsWithSupabase();
 
     await upsertRows(supabaseConfig.tables.clients, state.clients.map(serializeClientRow), "id");
     await upsertRows(supabaseConfig.tables.products, productCatalog.map(serializeProductRow), "id");
@@ -2473,6 +2474,42 @@ async function upsertRows(table, rows, onConflict) {
   if (!table || !rows.length) return;
   const { error } = await supabaseClient.from(table).upsert(rows, { onConflict });
   if (error) throw error;
+}
+
+async function reconcileProductIdsWithSupabase() {
+  if (!supabaseClient || !currentStore?.id) return;
+  const table = supabaseConfig.tables.products;
+  if (!table) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from(table)
+      .select("id,name")
+      .eq("store_id", currentStore.id);
+    if (error) throw error;
+    const remoteByName = new Map();
+    (data || []).forEach((row) => {
+      if (row?.name) remoteByName.set(String(row.name).trim(), String(row.id));
+    });
+    if (!remoteByName.size) return;
+    const idChanges = new Map();
+    productCatalog.forEach((product) => {
+      const remoteId = remoteByName.get(String(product.name || "").trim());
+      if (remoteId && product.dbId !== remoteId) {
+        if (product.dbId) idChanges.set(product.dbId, remoteId);
+        product.dbId = remoteId;
+      }
+    });
+    if (idChanges.size) {
+      state.stock.forEach((item) => {
+        if (item.productDbId && idChanges.has(item.productDbId)) {
+          item.productDbId = idChanges.get(item.productDbId);
+        }
+      });
+    }
+    saveState();
+  } catch (err) {
+    console.warn("reconcileProductIdsWithSupabase failed", err);
+  }
 }
 
 function normalizeClientRow(row) {
