@@ -1553,21 +1553,97 @@ function renderProductPie(productTotals) {
     return { name, value, color: colors[index % colors.length], start, end: accumulator };
   });
 
-  chart.innerHTML = `<div class="pie-chart-disc" style="background: conic-gradient(${slices.map((slice) => `${slice.color} ${slice.start}% ${slice.end}%`).join(", ")});"></div>`;
+  const size = 180;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size / 2;
+  const innerR = r * 0.48;
+
+  const arcPath = (startPct, endPct) => {
+    if (endPct - startPct >= 99.999) {
+      return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.001} ${cy - r} L ${cx - 0.001} ${cy - innerR} A ${innerR} ${innerR} 0 1 0 ${cx} ${cy - innerR} Z`;
+    }
+    const toXY = (pct, radius) => {
+      const a = (pct / 100) * Math.PI * 2 - Math.PI / 2;
+      return [cx + radius * Math.cos(a), cy + radius * Math.sin(a)];
+    };
+    const [x1, y1] = toXY(startPct, r);
+    const [x2, y2] = toXY(endPct, r);
+    const [x3, y3] = toXY(endPct, innerR);
+    const [x4, y4] = toXY(startPct, innerR);
+    const large = endPct - startPct > 50 ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${innerR} ${innerR} 0 ${large} 0 ${x4} ${y4} Z`;
+  };
+
+  const paths = slices.map((slice, i) => `
+    <path class="pie-slice" data-i="${i}" d="${arcPath(slice.start, slice.end)}" fill="${slice.color}"
+      stroke="rgba(255,255,255,0.92)" stroke-width="1.5"></path>
+  `).join("");
+
+  chart.innerHTML = `
+    <div class="pie-chart-wrap">
+      <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" class="pie-chart-svg" role="img" aria-label="Vendas por produto">
+        ${paths}
+      </svg>
+      <div class="pie-tooltip" id="pieTooltip" hidden></div>
+    </div>
+  `;
   legend.innerHTML = "";
 
   slices.forEach((slice) => {
     const row = document.createElement("div");
     row.className = "legend-row";
+    const pct = ((slice.value / total) * 100).toFixed(1);
     row.innerHTML = `
       <div>
         <span class="legend-dot" style="background:${slice.color}"></span>
-        <strong>${slice.name}</strong>
+        <strong>${escapeHtml(slice.name)}</strong>
       </div>
-      <small>${currency(slice.value)}</small>
+      <small>${currency(slice.value)} · ${pct}%</small>
     `;
     legend.appendChild(row);
   });
+
+  const tooltip = chart.querySelector("#pieTooltip");
+  const wrap = chart.querySelector(".pie-chart-wrap");
+  const showTip = (idx, evt) => {
+    const slice = slices[idx];
+    if (!slice) return;
+    const pct = ((slice.value / total) * 100).toFixed(1);
+    tooltip.innerHTML = `
+      <span class="pie-tooltip-dot" style="background:${slice.color}"></span>
+      <div>
+        <strong>${escapeHtml(slice.name)}</strong>
+        <small>${currency(slice.value)} · ${pct}%</small>
+      </div>
+    `;
+    tooltip.hidden = false;
+    const rect = wrap.getBoundingClientRect();
+    const x = (evt.clientX || rect.left + rect.width / 2) - rect.left;
+    const y = (evt.clientY || rect.top + rect.height / 2) - rect.top;
+    tooltip.style.left = Math.min(rect.width - 10, Math.max(10, x + 12)) + "px";
+    tooltip.style.top = Math.max(0, y - 36) + "px";
+    chart.querySelectorAll(".pie-slice").forEach((p, i) => {
+      p.classList.toggle("pie-slice-active", i === idx);
+    });
+  };
+  const hideTip = () => {
+    tooltip.hidden = true;
+    chart.querySelectorAll(".pie-slice-active").forEach((p) => p.classList.remove("pie-slice-active"));
+  };
+  chart.querySelectorAll(".pie-slice").forEach((p) => {
+    const idx = Number(p.dataset.i);
+    p.addEventListener("mousemove", (e) => showTip(idx, e));
+    p.addEventListener("mouseleave", hideTip);
+    p.addEventListener("click", (e) => showTip(idx, e));
+    p.addEventListener("touchstart", (e) => {
+      const t = e.touches[0];
+      showTip(idx, { clientX: t.clientX, clientY: t.clientY });
+    }, { passive: true });
+  });
+  document.addEventListener("touchstart", (e) => {
+    if (!wrap.contains(e.target)) hideTip();
+  }, { passive: true });
 }
 
 function renderSalesTable() {
@@ -4457,6 +4533,8 @@ function bindPromotions() {
   const addBtn = document.getElementById("addPromotionButton");
   const cancelBtn = document.getElementById("cancelPromotionButton");
   const form = document.getElementById("promotionForm");
+  const refreshTipsBtn = document.getElementById("refreshPromoTipsButton");
+  refreshTipsBtn?.addEventListener("click", () => renderPromoTips(true));
   addBtn?.addEventListener("click", () => {
     try { openPromotionForm(null); }
     catch (err) { console.error("openPromotionForm failed", err); alert("Não consegui abrir o formulário: " + err.message); }
@@ -4552,9 +4630,198 @@ function formatDatePT(iso) {
   return `${d}/${m}/${y}`;
 }
 
+const TIP_DAYS_LOOKBACK = 14;
+
+function buildSalesInsights() {
+  const today = todayISO();
+  const dayMs = 86400000;
+  const cutoff = new Date(Date.parse(today) - (TIP_DAYS_LOOKBACK - 1) * dayMs).toISOString().slice(0, 10);
+  const recent = (state.sales || []).filter((s) => s.entryType === "sale" && s.date >= cutoff);
+  const todaySales = recent.filter((s) => s.date === today);
+  const yesterday = new Date(Date.parse(today) - dayMs).toISOString().slice(0, 10);
+  const yesterdaySales = recent.filter((s) => s.date === yesterday);
+
+  const byProduct = {};
+  const byPayment = {};
+  const byClient = {};
+  const bySeller = {};
+  let totalRevenue = 0;
+  let qty = 0;
+  recent.forEach((s) => {
+    const name = findProduct(s.productId)?.name || s.productName || "—";
+    byProduct[name] = (byProduct[name] || 0) + (s.total || 0);
+    byPayment[s.paymentMethod || "—"] = (byPayment[s.paymentMethod || "—"] || 0) + (s.total || 0);
+    if (s.customerName) byClient[s.customerName] = (byClient[s.customerName] || 0) + (s.total || 0);
+    if (s.sellerUsername) bySeller[s.sellerUsername] = (bySeller[s.sellerUsername] || 0) + (s.total || 0);
+    totalRevenue += s.total || 0;
+    qty += s.quantity || 0;
+  });
+
+  const top = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
+  const todayRevenue = todaySales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const yesterdayRevenue = yesterdaySales.reduce((sum, s) => sum + (s.total || 0), 0);
+
+  // Day-of-week pattern (last 14 days)
+  const dowRevenue = [0, 0, 0, 0, 0, 0, 0];
+  recent.forEach((s) => {
+    const d = new Date(s.date + "T00:00:00").getDay();
+    dowRevenue[d] += s.total || 0;
+  });
+  const todayDow = new Date(today + "T00:00:00").getDay();
+  const dowNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+  return {
+    today, yesterday, recent, todaySales, yesterdaySales,
+    todayRevenue, yesterdayRevenue,
+    productsRanked: top(byProduct),
+    paymentsRanked: top(byPayment),
+    clientsRanked: top(byClient),
+    sellersRanked: top(bySeller),
+    totalRevenue, qty,
+    dowRevenue, todayDow, dowNames,
+    dayOfWeekName: dowNames[todayDow]
+  };
+}
+
+function buildStockInsights() {
+  const items = (state.stock || []).map((it) => {
+    const product = findProduct(it.productId);
+    return { ...it, name: product?.name || it.productId, price: product?.price || 0 };
+  });
+  const lowStock = items.filter((it) => it.quantity > 0 && it.quantity <= (it.minStock || 2)).sort((a, b) => a.quantity - b.quantity);
+  const outOfStock = items.filter((it) => it.quantity === 0);
+  const overstocked = items.filter((it) => it.quantity >= 50).sort((a, b) => b.quantity - a.quantity);
+  return { items, lowStock, outOfStock, overstocked };
+}
+
+function generateMarketingTips(insights) {
+  const tips = [];
+  const { todayRevenue, yesterdayRevenue, productsRanked, clientsRanked, paymentsRanked, dayOfWeekName, dowRevenue, todayDow, sellersRanked, todaySales } = insights;
+
+  if (todaySales.length === 0) {
+    tips.push(`Ainda sem vendas hoje (${dayOfWeekName}). Envie uma mensagem WhatsApp aos 5 melhores clientes a lembrar a oferta da semana.`);
+  } else if (yesterdayRevenue > 0) {
+    const delta = todayRevenue - yesterdayRevenue;
+    const pct = ((delta / yesterdayRevenue) * 100).toFixed(0);
+    if (delta < 0) {
+      tips.push(`Hoje está ${Math.abs(pct)}% abaixo de ontem. Ative um cupão flash de 10% nas próximas 2 horas e divulgue no status do WhatsApp.`);
+    } else {
+      tips.push(`Boa! Hoje está ${pct}% acima de ontem. Mantenha o ritmo: publique uma foto do "produto do dia" no Facebook da loja.`);
+    }
+  }
+
+  if (productsRanked.length) {
+    const [topName, topRev] = productsRanked[0];
+    tips.push(`O produto campeão dos últimos 14 dias é "${topName}" (${currency(topRev)}). Crie um combo: "${topName} + acessório" com 5% de desconto.`);
+  }
+  if (productsRanked.length >= 2) {
+    const [, secondInfo] = productsRanked;
+    tips.push(`"${secondInfo[0]}" tem boa procura — destaque-o no balcão com etiqueta "Mais vendido" para cross-sell.`);
+  }
+  if (productsRanked.length >= 3) {
+    const slow = productsRanked[productsRanked.length - 1];
+    tips.push(`"${slow[0]}" vende pouco. Faça 2x1 ou ofereça-o como brinde acima de 10 000 Kz para escoar.`);
+  }
+
+  if (clientsRanked.length) {
+    const [topClient, val] = clientsRanked[0];
+    tips.push(`Cliente VIP da quinzena: ${topClient} (${currency(val)}). Envie um obrigado personalizado e ofereça entrega gratuita na próxima compra.`);
+  }
+
+  if (paymentsRanked.length >= 2 && paymentsRanked[0][0] !== "TPA") {
+    tips.push(`A maioria paga em ${paymentsRanked[0][0]}. Coloque um aviso "Aceitamos TPA, Express e Multicaixa" para reduzir desistências.`);
+  }
+
+  // Best day of week
+  const maxDow = dowRevenue.indexOf(Math.max(...dowRevenue));
+  if (dowRevenue[maxDow] > 0 && maxDow !== todayDow) {
+    tips.push(`O seu melhor dia da semana é ${insights.dowNames[maxDow]}. Programe campanhas e stock extra para essa data.`);
+  }
+
+  if (sellersRanked.length >= 2) {
+    tips.push(`Operador top: ${sellersRanked[0][0]}. Partilhe a técnica com a equipa numa reunião de 5 min de manhã.`);
+  }
+
+  // Hour-based tip
+  const hour = new Date().getHours();
+  if (hour < 12) {
+    tips.push(`Manhã é hora de captação: distribua flyers perto das paragens de táxi com a oferta do dia.`);
+  } else if (hour < 17) {
+    tips.push(`Tarde lenta? Envie uma promoção relâmpago de 1 hora pelo grupo de WhatsApp da loja.`);
+  } else {
+    tips.push(`Final do dia: peça avaliações aos clientes que compraram hoje. Cada estrela traz 3 novos compradores.`);
+  }
+
+  return tips.slice(0, 6);
+}
+
+function generateInnovationTips(insights, stockInfo) {
+  const tips = [];
+  const { outOfStock, lowStock, overstocked } = stockInfo;
+  const { productsRanked, recent } = insights;
+
+  if (outOfStock.length) {
+    tips.push(`⚠️ ${outOfStock.length} produto(s) em ruptura: ${outOfStock.slice(0, 3).map((i) => i.name).join(", ")}. Reponha hoje para não perder vendas.`);
+  }
+  if (lowStock.length) {
+    tips.push(`Stock baixo: ${lowStock.slice(0, 3).map((i) => `${i.name} (${i.quantity})`).join(", ")}. Faça encomenda preventiva.`);
+  }
+  if (overstocked.length) {
+    tips.push(`Excesso de "${overstocked[0].name}" (${overstocked[0].quantity} un). Crie pack promocional ou ofereça em fidelização.`);
+  }
+
+  // Slow-moving product (in stock but no sales in recent window)
+  const soldNames = new Set(recent.map((s) => findProduct(s.productId)?.name || s.productName));
+  const stagnant = stockInfo.items.filter((it) => it.quantity > 0 && !soldNames.has(it.name));
+  if (stagnant.length) {
+    tips.push(`"${stagnant[0].name}" tem estoque mas não vendeu nos últimos 14 dias. Reposicione na vitrine ou inclua numa promoção.`);
+  }
+
+  tips.push(`Inove: lance um cartão de fidelidade — a cada 10 garrafões, 1 grátis. Aumenta a frequência de visita.`);
+  tips.push(`Diversifique: ofereça entrega ao domicílio em zona de 2 km com taxa simbólica de 200 Kz.`);
+
+  if (productsRanked.length) {
+    tips.push(`Crie um "kit escritório" com 5x ${productsRanked[0][0]} e desconto de 8% para empresas/escolas.`);
+  }
+
+  tips.push(`Melhoria contínua: registe a temperatura/pH 2x ao dia e exiba o cartão de qualidade na entrada — cria confiança.`);
+  tips.push(`Experimente uma nova categoria: copos descartáveis, suportes ou filtros de torneira — alto giro com pouco capital.`);
+
+  // Stock health summary
+  const totalUnits = stockInfo.items.reduce((s, i) => s + i.quantity, 0);
+  if (totalUnits > 0) {
+    tips.push(`Estoque total: ${totalUnits} unidades. Faça inventário visual semanal — diferenças >5% sinalizam fugas ou erros de venda.`);
+  }
+
+  return tips.slice(0, 6);
+}
+
+function renderPromoTips() {
+  const mkList = document.getElementById("promoMarketingTips");
+  const ivList = document.getElementById("promoInnovationTips");
+  if (!mkList || !ivList) return;
+  try {
+    const insights = buildSalesInsights();
+    const stockInfo = buildStockInsights();
+    const marketing = generateMarketingTips(insights);
+    const innovation = generateInnovationTips(insights, stockInfo);
+    mkList.innerHTML = marketing.length
+      ? marketing.map((t) => `<li>${escapeHtml(t)}</li>`).join("")
+      : `<li class="promo-tip-empty">Sem dados suficientes ainda. Registe vendas para receber dicas personalizadas.</li>`;
+    ivList.innerHTML = innovation.length
+      ? innovation.map((t) => `<li>${escapeHtml(t)}</li>`).join("")
+      : `<li class="promo-tip-empty">Sem dados de estoque para analisar.</li>`;
+  } catch (err) {
+    console.warn("renderPromoTips failed", err);
+    mkList.innerHTML = `<li class="promo-tip-empty">Erro ao gerar dicas.</li>`;
+    ivList.innerHTML = "";
+  }
+}
+
 function renderPromotions() {
   const list = document.getElementById("promotionsList");
   const emptyHint = document.getElementById("promoEmptyHint");
+  renderPromoTips();
   if (!list) return;
   ensurePromotionsArray();
   const promos = [...state.promotions].sort((a, b) => (a.endDate || "").localeCompare(b.endDate || ""));
