@@ -206,6 +206,10 @@
                 <select name="clientId" id="saleClient"></select>
               </label>
               <label>
+                NIF do cliente (opcional)
+                <input type="text" name="saleNif" id="saleNif" placeholder="Ex.: 5417023456" maxlength="20" autocomplete="off">
+              </label>
+              <label>
                 Produto
                 <select name="productId" id="saleProduct"></select>
               </label>
@@ -304,6 +308,7 @@
                 <input type="date" id="filterDate">
               </label>
             </div>
+            <div class="client-summary-panel" id="clientPurchaseSummary" hidden></div>
             <div class="table-wrap">
               <table>
                 <thead>

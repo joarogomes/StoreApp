@@ -732,6 +732,13 @@ function bindInteractiveControls() {
     document.getElementById(id)?.addEventListener("change", renderSalePreview);
   });
 
+  document.getElementById("saleClient")?.addEventListener("change", (e) => {
+    const nifInput = document.getElementById("saleNif");
+    if (!nifInput) return;
+    const client = findClient(e.target.value);
+    nifInput.value = client?.nif || "";
+  });
+
   financePeriodButtons.forEach((button) => {
     button.addEventListener("click", () => {
       financePeriod = button.dataset.financePeriod;
@@ -1657,26 +1664,106 @@ function renderSalesTable() {
     date: document.getElementById("filterDate").value
   };
 
-  state.sales
+  const filtered = state.sales
     .filter((item) => !filters.clientId || item.clientId === filters.clientId)
     .filter((item) => !filters.productId || item.productId === filters.productId)
     .filter((item) => !filters.paymentMethod || item.paymentMethod === filters.paymentMethod)
     .filter((item) => !filters.date || item.date === filters.date)
     .slice()
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .forEach((sale) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${sale.date}</td>
-        <td>${escapeHtml(findClient(sale.clientId)?.name || sale.customerName || "-")}</td>
-        <td>${escapeHtml(findProduct(sale.productId)?.name || sale.productName || "-")}</td>
-        <td>${translateEntryType(sale.entryType)}</td>
-        <td>${escapeHtml(sale.paymentMethod)}</td>
-        <td>${escapeHtml(sale.sellerUsername || "-")}</td>
-        <td>${currency(sale.total)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  filtered.forEach((sale) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${sale.date}</td>
+      <td>${escapeHtml(findClient(sale.clientId)?.name || sale.customerName || "-")}</td>
+      <td>${escapeHtml(findProduct(sale.productId)?.name || sale.productName || "-")}</td>
+      <td>${translateEntryType(sale.entryType)}</td>
+      <td>${escapeHtml(sale.paymentMethod)}</td>
+      <td>${escapeHtml(sale.sellerUsername || "-")}</td>
+      <td>${currency(sale.total)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  renderClientPurchaseSummary(filters.clientId);
+}
+
+function renderClientPurchaseSummary(clientId) {
+  const container = document.getElementById("clientPurchaseSummary");
+  if (!container) return;
+  if (!clientId) {
+    container.hidden = true;
+    container.innerHTML = "";
+    return;
+  }
+  const client = findClient(clientId);
+  const sales = state.sales.filter((s) => s.clientId === clientId && s.entryType === "sale");
+
+  if (!sales.length) {
+    container.hidden = false;
+    container.innerHTML = `
+      <div class="client-summary-header">
+        <strong>${escapeHtml(client?.name || "Cliente")}</strong>
+        ${client?.nif ? `<small>NIF: ${escapeHtml(client.nif)}</small>` : `<small>Sem NIF registado</small>`}
+      </div>
+      <p class="helper-note">Sem compras registadas para este cliente.</p>
+    `;
+    return;
+  }
+
+  const byProduct = new Map();
+  let grandQty = 0;
+  let grandTotal = 0;
+  sales.forEach((s) => {
+    const name = findProduct(s.productId)?.name || s.productName || "—";
+    const cur = byProduct.get(name) || { qty: 0, total: 0, count: 0 };
+    cur.qty += Number(s.quantity) || 0;
+    cur.total += Number(s.total) || 0;
+    cur.count += 1;
+    byProduct.set(name, cur);
+    grandQty += Number(s.quantity) || 0;
+    grandTotal += Number(s.total) || 0;
+  });
+
+  const rows = [...byProduct.entries()]
+    .sort((a, b) => b[1].qty - a[1].qty)
+    .map(([name, info]) => `
+      <tr>
+        <td>${escapeHtml(name)}</td>
+        <td class="num">${info.count}</td>
+        <td class="num">${info.qty}</td>
+        <td class="num">${currency(info.total)}</td>
+      </tr>
+    `).join("");
+
+  container.hidden = false;
+  container.innerHTML = `
+    <div class="client-summary-header">
+      <div>
+        <strong>${escapeHtml(client?.name || "Cliente")}</strong>
+        ${client?.nif ? `<small>NIF: ${escapeHtml(client.nif)}</small>` : `<small>Sem NIF registado</small>`}
+      </div>
+      <div class="client-summary-totals">
+        <span class="badge success">${sales.length} venda${sales.length === 1 ? "" : "s"}</span>
+        <span class="badge muted">${grandQty} unidades</span>
+        <span class="badge">${currency(grandTotal)}</span>
+      </div>
+    </div>
+    <div class="table-wrap client-summary-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Produto</th>
+            <th class="num">Nº de compras</th>
+            <th class="num">Total unidades</th>
+            <th class="num">Valor</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 function renderClients() {
@@ -2122,6 +2209,10 @@ async function onCreateSale(event) {
     submitButton.textContent = "A emitir...";
   }
   try {
+    const rawNif = String(form.get("saleNif") || "").trim();
+    if (rawNif && client) {
+      client.nif = rawNif;
+    }
     const saleRecord = {
       id: crypto.randomUUID(),
       clientId,
@@ -2134,6 +2225,7 @@ async function onCreateSale(event) {
       date,
       total,
       costTotal,
+      nif: rawNif || client?.nif || "",
       sellerUsername: currentUser?.username || "",
       sellerRole: currentRole || ""
     };
@@ -3947,13 +4039,13 @@ async function issueFiscalDocument({ type = "FR", sale }) {
     client: client ? {
       id: client.id,
       name: client.name,
-      nif: (client.nif && client.nif.trim()) || "999999999",
+      nif: (sale?.nif && sale.nif.trim()) || (client.nif && client.nif.trim()) || "999999999",
       address: client.address || "",
       phone: client.phone || ""
     } : {
       id: null,
       name: sale?.customerName || "Consumidor Final",
-      nif: "999999999",
+      nif: (sale?.nif && sale.nif.trim()) || "999999999",
       address: "",
       phone: ""
     },
