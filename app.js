@@ -8,7 +8,7 @@ const USERS_KEY = "agua-cristalina-users-v1";
 const CURRENT_STORE_KEY = "agua-cristalina-current-store";
 
 const DEFAULT_STORE_ID = "default";
-const DEFAULT_STORE_NAME = "Aquagest";
+const DEFAULT_STORE_NAME = "WaterGest";
 const DEFAULT_REPORT_PHONE = "+244939667223";
 const ROLE_LABELS = { admin: "Administrador", operacao: "Operacao" };
 
@@ -34,7 +34,7 @@ const VAT_EXEMPTION_REASONS = {
   M99: "Outras isenções (declarar fundamentação)"
 };
 const SOFTWARE_PRODUCT_VERSION = "1.0.0";
-const SOFTWARE_PRODUCT_NAME = "Aquagest";
+const SOFTWARE_PRODUCT_NAME = "WaterGest";
 
 let currentRole = null;
 let currentUser = null;
@@ -3638,7 +3638,7 @@ function addPdfFooters(doc) {
     doc.setFontSize(8);
     doc.setTextColor(110, 120, 140);
     doc.text(`Pagina ${i} de ${pages}`, w / 2, h - 20, { align: "center" });
-    doc.text("Aquagest - Relatorio gerado automaticamente", 40, h - 20);
+    doc.text("WaterGest - Relatorio gerado automaticamente", 40, h - 20);
   }
   doc.setTextColor(20, 30, 50);
 }

@@ -1,4 +1,4 @@
-# Aquagest
+# WaterGest
 
 A management application prototype for a filtered water store (formerly "Agua Cristalina"; localStorage keys retain the old prefix to preserve existing user data), covering daily operations, financial control, client management, water quality monitoring, and reporting.
 
