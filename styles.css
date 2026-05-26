@@ -1955,3 +1955,24 @@ body.menu-open .app-header {
 .client-summary-table tbody tr:last-child td {
   border-bottom: none;
 }
+
+.sales-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.sales-pagination button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.sales-pagination #salesPageInfo {
+  min-width: 180px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

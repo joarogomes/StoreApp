@@ -36,8 +36,11 @@ const VAT_EXEMPTION_REASONS = {
 const SOFTWARE_PRODUCT_VERSION = "1.0.0";
 const SOFTWARE_PRODUCT_NAME = "WaterGest";
 
+const SALES_PAGE_SIZE = 200;
+
 let currentRole = null;
 let currentUser = null;
+let salesCurrentPage = 0;
 let sessionStarted = false;
 let stores = [];
 let users = [];
@@ -716,7 +719,18 @@ async function onQuickExpense(event) {
 
 function bindFilters() {
   ["filterClient", "filterProduct", "filterPayment", "filterDate"].forEach((id) => {
-    document.getElementById(id)?.addEventListener("input", renderSalesTable);
+    document.getElementById(id)?.addEventListener("input", () => {
+      salesCurrentPage = 0;
+      renderSalesTable();
+    });
+  });
+
+  document.getElementById("salesPrevPage")?.addEventListener("click", () => {
+    if (salesCurrentPage > 0) { salesCurrentPage--; renderSalesTable(); }
+  });
+  document.getElementById("salesNextPage")?.addEventListener("click", () => {
+    salesCurrentPage++;
+    renderSalesTable();
   });
 }
 
@@ -1655,6 +1669,10 @@ function renderProductPie(productTotals) {
 
 function renderSalesTable() {
   const tbody = document.getElementById("salesTable");
+  const pagination = document.getElementById("salesPagination");
+  const pageInfo = document.getElementById("salesPageInfo");
+  const prevBtn = document.getElementById("salesPrevPage");
+  const nextBtn = document.getElementById("salesNextPage");
   tbody.innerHTML = "";
 
   const filters = {
@@ -1672,7 +1690,13 @@ function renderSalesTable() {
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  filtered.forEach((sale) => {
+  const totalPages = Math.max(1, Math.ceil(filtered.length / SALES_PAGE_SIZE));
+  if (salesCurrentPage >= totalPages) salesCurrentPage = totalPages - 1;
+
+  const start = salesCurrentPage * SALES_PAGE_SIZE;
+  const page = filtered.slice(start, start + SALES_PAGE_SIZE);
+
+  page.forEach((sale) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${sale.date}</td>
@@ -1685,6 +1709,18 @@ function renderSalesTable() {
     `;
     tbody.appendChild(tr);
   });
+
+  if (pagination) {
+    const showPager = filtered.length > SALES_PAGE_SIZE;
+    pagination.hidden = !showPager;
+    if (showPager) {
+      const from = start + 1;
+      const to = Math.min(start + SALES_PAGE_SIZE, filtered.length);
+      pageInfo.textContent = `${from}–${to} de ${filtered.length} movimentos`;
+      if (prevBtn) prevBtn.disabled = salesCurrentPage === 0;
+      if (nextBtn) nextBtn.disabled = salesCurrentPage >= totalPages - 1;
+    }
+  }
 
   renderClientPurchaseSummary(filters.clientId);
 }

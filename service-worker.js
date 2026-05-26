@@ -1,4 +1,4 @@
-const CACHE_NAME = "watergest-cache-v15";
+const CACHE_NAME = "watergest-cache-v16";
 const PRECACHE_ASSETS = [
   "./manifest.webmanifest",
   "./assets/logo.png",
