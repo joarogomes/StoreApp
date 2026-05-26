@@ -2667,11 +2667,22 @@ async function insertStockMovement({ itemId, productId, quantity, type }) {
 
 async function fetchStoreRows(table) {
   if (!table) return [];
-  let query = supabaseClient.from(table).select("*");
-  if (currentStore?.id) query = query.eq("store_id", currentStore.id);
-  const { data, error } = await query.order("created_at", { ascending: false });
-  if (error) throw error;
-  return data || [];
+  const PAGE = 1000;
+  let from = 0;
+  let allRows = [];
+  while (true) {
+    let query = supabaseClient.from(table).select("*");
+    if (currentStore?.id) query = query.eq("store_id", currentStore.id);
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = data || [];
+    allRows = allRows.concat(batch);
+    if (batch.length < PAGE) break;
+    from += PAGE;
+  }
+  return allRows;
 }
 
 async function upsertRows(table, rows, onConflict) {
